@@ -56,25 +56,25 @@ func Score(password string) ScoreResult {
 
 	// Dictionary penalty (check both raw and leet-normalized)
 	if isCommonPassword(password) {
-		score -= 40
+		score -= DictionaryPenalty
 		penalties = append(penalties, "found in common password list")
 	} else if isCommonPassword(normalizeLeet(password)) {
-		score -= 30
+		score -= LeetDictionaryPenalty
 		penalties = append(penalties, "leet-speak variant of common password")
 	}
 
 	// Length bonus
-	if len(password) > 12 {
-		bonus := int(math.Min(float64((len(password)-12)*2), 15))
+	if len(password) > LengthBonusThreshold {
+		bonus := int(math.Min(float64((len(password)-LengthBonusThreshold)*LengthBonusMultiplier), float64(LengthBonusMax)))
 		score += bonus
 	}
 
 	// Clamp score
-	if score < 0 {
-		score = 0
+	if score < ScoreMin {
+		score = ScoreMin
 	}
-	if score > 100 {
-		score = 100
+	if score > ScoreMax {
+		score = ScoreMax
 	}
 
 	result := ScoreResult{
@@ -136,9 +136,9 @@ func entropyToBaseScore(entropy float64) int {
 	// ~50 bits = ~50
 	// ~80 bits = ~75
 	// ~128+ bits = 100
-	score := int(entropy * 0.78)
-	if score > 100 {
-		score = 100
+	score := int(entropy * EntropyMultiplier)
+	if score > ScoreMax {
+		score = ScoreMax
 	}
 	return score
 }
@@ -166,10 +166,10 @@ func sequencePenalty(password string) int {
 	}
 
 	if maxRun >= 4 {
-		return 15
+		return SequencePenaltyLarge
 	}
 	if maxRun >= 3 {
-		return 8
+		return SequencePenaltySmall
 	}
 	return 0
 }
@@ -196,10 +196,10 @@ func repeatPenalty(password string) int {
 	}
 
 	if maxRun >= 4 {
-		return 20
+		return RepeatPenaltyLarge
 	}
 	if maxRun >= 3 {
-		return 10
+		return RepeatPenaltySmall
 	}
 	return 0
 }
@@ -215,17 +215,17 @@ func keyboardWalkPenalty(password string) int {
 				pattern := row[start : start+windowSize]
 				if strings.Contains(lower, pattern) {
 					if windowSize >= 6 {
-						return 20
+						return KeyboardPenaltyLarge
 					}
-					return 10
+					return KeyboardPenaltySmall
 				}
 				// Also check reversed
 				reversed := reverseString(pattern)
 				if strings.Contains(lower, reversed) {
 					if windowSize >= 6 {
-						return 20
+						return KeyboardPenaltyLarge
 					}
-					return 10
+					return KeyboardPenaltySmall
 				}
 			}
 		}

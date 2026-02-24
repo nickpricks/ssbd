@@ -2,6 +2,9 @@
 
 Complete project structure, file reference, and setup guide.
 
+> **Same Same But Different** — PassForge's signature rotation engine. One strong base, many unique variants.
+> `p@sSwor4 → P@sswor4 → pAs$wor4 → p@ssWor4 → pa$Swor4`
+
 ---
 
 ## Directory Structure
@@ -24,23 +27,27 @@ passforge/
 │       ├── suggester.go           # Actionable improvement suggestions
 │       ├── hibp.go                # Have I Been Pwned k-anonymity breach check
 │       ├── wordlist.go            # EFF wordlist loader (//go:embed, sync.Once)
+│       ├── rotator.go             # "Same Same But Different" rotation variant engine
 │       ├── wordlist/              # Embedded data
 │       │   └── eff_large.txt      # EFF Large Wordlist — 7776 words for passphrases
 │       ├── generator_test.go      # Tests: generation, character classes, exclusions, uniqueness
+│       ├── rotator_test.go        # Tests: rotation variants, uniqueness, dedup, edge cases
 │       ├── scorer_test.go         # Tests: scoring, penalties, leet-speak, labels
 │       ├── suggester_test.go      # Tests: suggestion output for various password types
 │       └── wordlist_test.go       # Tests: wordlist loading, word count, idempotency
 │
+├── Makefile                       # Build, test, bench, vet, fmt — all common tasks
 ├── .gitignore                     # Go binaries, IDE files, .env, .claude/, OS junk
 ├── go.mod                         # Go module definition and direct dependencies
 ├── go.sum                         # Dependency checksums (auto-managed by Go)
 │
 ├── README.md                      # Project overview, features, scoring algorithm, roadmap
-├── PLAN.md                        # Full implementation plan, architecture decisions, risk register
-├── arch.md                        # This file — project structure, file map, setup guide
-├── help.md                        # Internal process overview (how scoring, generation, etc. work)
-├── help_ext.md                    # External package reference (cobra, pflag, stdlib usage)
-└── man.md                         # Detailed line-by-line source code documentation
+├── docs/                          # All documentation (except README)
+│   ├── PLAN.md                    # Full implementation plan, architecture decisions, risk register
+│   ├── arch.md                    # This file — project structure, file map, setup guide
+│   ├── help.md                    # Internal process overview (how scoring, generation, etc. work)
+│   ├── help_ext.md                # External package reference (cobra, pflag, stdlib usage)
+│   └── man.md                     # Detailed line-by-line source code documentation
 ```
 
 ---
@@ -51,7 +58,7 @@ passforge/
 
 | File | Purpose | Audience |
 |---|---|---|
-| [README.md](README.md) | Project overview — what PassForge is, features, tech stack, roadmap | Everyone (first thing you read) |
+| [README.md](../README.md) | Project overview — what PassForge is, features, tech stack, roadmap | Everyone (first thing you read) |
 | [PLAN.md](PLAN.md) | Implementation plan — platform strategy, milestone roadmap, deployment, risk register | Contributors, architects |
 | [arch.md](arch.md) | This file — directory structure, file map, setup/run instructions | New developers, onboarding |
 | [help.md](help.md) | Internal process overview — how generation, scoring, suggestions, breach checking work at a high level | Developers wanting to understand the logic |
@@ -71,7 +78,7 @@ passforge/
 
 #### `cmd/passforge/main.go`
 
-The CLI entry point. Defines five cobra subcommands:
+The CLI entry point. Defines six cobra subcommands:
 
 | Command | What it does | Core function called |
 |---|---|---|
@@ -79,6 +86,7 @@ The CLI entry point. Defines five cobra subcommands:
 | `passphrase` | EFF wordlist passphrase | `core.GeneratePassphrase(cfg)` |
 | `check` | Score a password's strength | `core.Score(pw)` + optional `HIBPChecker` |
 | `suggest` | Improvement suggestions | `core.Score(pw)` (includes suggestions) |
+| `rotate` / `ssbd` | Rotation variants (Same Same But Different) | `core.RotateWithConfig(pw, cfg)` |
 | `bulk` | Generate N passwords | `core.Generate(cfg)` in a loop |
 
 Global flag `--json` enables JSON output on all commands. Exit codes: `0` strong, `1` weak, `2` breached.
@@ -88,6 +96,7 @@ Global flag `--json` enables JSON output on all commands. Exit codes: `0` strong
 Data types only — no logic. Defines:
 - `GeneratorConfig` — length, character class toggles, exclusion list
 - `PassphraseConfig` — word count, separator, capitalization, number suffix
+- `RotateConfig` — count, min/max length, strict-length toggle
 - `ScoreResult` — score, label, entropy, penalties, suggestions, breach flag
 - `LabelForScore()` — maps 0-100 score to Weak/Fair/Strong/Very Strong
 
@@ -129,6 +138,14 @@ Defines `BreachChecker` interface with two implementations:
 - `HIBPChecker` — real HTTP client with 5s timeout
 - `NoOpChecker` — always returns false (offline/testing)
 
+#### `internal/core/rotator.go`
+
+The "Same Same But Different" engine. Two public functions:
+- `Rotate(base, count)` — v1 API, same-length substitution-only variants (delegates to `RotateWithConfig` with `StrictLength: true`)
+- `RotateWithConfig(base, cfg)` — v2 API with full configuration: variable-length variants via insertions, appends, prepends, and repeat-dropping, constrained by `MinLength`/`MaxLength` (±3 chars from base)
+
+Uses mixed-radix enumeration for substitution mutations, two-phase pipeline for length mutations. Deduplicates against the base and all prior variants.
+
 #### `internal/core/wordlist.go`
 
 Loads the EFF Large Wordlist (7776 words) via `//go:embed`. Parses the tab-separated format once on first call, caches the result. Used only by `GeneratePassphrase()`.
@@ -137,6 +154,7 @@ Loads the EFF Large Wordlist (7776 words) via `//go:embed`. Parses the tab-separ
 
 All tests live alongside the code they test in `internal/core/`:
 - `generator_test.go` — default config, custom lengths, character classes, exclusions, invalid input, uniqueness
+- `rotator_test.go` — variant uniqueness, dedup, count validation, empty input, limited mutation points, structure preservation, variable-length growth/shrink, strict-length override, bounds validation, length mutation helpers
 - `scorer_test.go` — empty passwords, common passwords, leet-speak, sequences, repeats, keyboard walks, strong passwords, length bonus, labels, generated-password-is-strong integration test
 - `suggester_test.go` — short passwords, missing classes, common passwords, strong passwords
 - `wordlist_test.go` — word count (7776), known words, idempotent loading
@@ -193,6 +211,15 @@ go install ./cmd/passforge
 
 # Exclude ambiguous characters
 ./passforge generate --length 20 --exclude "0OIl1"
+
+# Rotation variants — same length (default)
+./passforge rotate "p@sSwor4" --count 5
+
+# Rotation variants — variable length
+./passforge rotate "p@sSwor4" --count 5 --min-length 8 --max-length 11
+
+# Rotation variants — strict length (force same as base)
+./passforge rotate "p@sSwor4" --count 5 --strict-length
 ```
 
 ### Run Tests
@@ -213,17 +240,26 @@ go test ./internal/core/ -v
 
 ### Development
 
+A `Makefile` is provided for common tasks. Run `make help` to see all targets.
+
 ```bash
-# Format code
+make build                    # Build the passforge binary
+make run ARGS="generate -l 20"  # Run without building
+make test                     # All tests (verbose)
+make bench                    # Benchmarks with memory stats
+make vet                      # Static analysis
+make fmt                      # Format all Go files
+make cover                    # Tests with coverage report
+make all                      # vet + test + bench
+make clean                    # Remove build artifacts
+```
+
+Or use raw Go commands:
+
+```bash
 go fmt ./...
-
-# Vet for issues
 go vet ./...
-
-# Build all packages (checks compilation without producing binaries)
 go build ./...
-
-# Run directly without building
 go run ./cmd/passforge generate --length 20
 ```
 

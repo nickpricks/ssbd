@@ -2,6 +2,11 @@
 
 ### *"Not just your ordinary password generator — we judge yours too."*
 
+> **Same Same But Different** — PassForge's signature rotation engine. One strong base password, many unique variants. Leet-speak cycling, case flips, symbol shifts — each variant passes "must differ" checks while keeping the same muscle memory.
+> ```
+> p@sSwor4  →  P@sswor4  →  pAs$wor4  →  p@ssWor4  →  pa$Swor4
+> ```
+
 ---
 
 A password toolkit that generates strong passwords, scores their strength, and provides actionable suggestions to improve weak ones. Built in Go. No passwords stored. Ever.
@@ -26,11 +31,15 @@ passforge check "MyP@ssw0rd"               # Score: 42/100 — Fair
 passforge check --breach "password123"     # Check against HIBP
 passforge suggest "hello123"               # Improvement suggestions
 passforge rotate "p@sSwor4" --count 5      # 5 rotation variants
+passforge ssbd "p@sSwor4" --count 5        # ^ alias for rotate
+passforge rotate "p@sSwor4" -n 5 --min-length 8 --max-length 11  # variable-length variants
 passforge bulk --count 10 --length 16      # 10 passwords at once
 passforge generate --json                  # JSON output
 ```
 
-> For setup, build, and run instructions see **[arch.md](arch.md#setup)**.
+> For setup, build, and run instructions see **[arch.md](docs/arch.md#setup)**.
+> Quick dev: `make build`, `make test`, `make bench`, `make all` — see `make help` for all targets.
+> Or run any command above directly: `make run ARGS="generate --length 20"`
 
 ## Features
 
@@ -97,6 +106,13 @@ passforge rotate "p@sSwor4" --count 12    # A full quarter of weekly rotations
 
 Built for the real world: standalone office machines, legacy systems with forced rotation, air-gapped environments. Secure, lazy, smart.
 
+**Variable-length variants** — with `--min-length` / `--max-length`, variants can grow or shrink by 1–3 characters via insertions, appends, prepends, or repeat-dropping. Use `--strict-length` to lock all variants to the base length.
+
+```bash
+passforge rotate "p@sSwor4" --count 5 --min-length 8 --max-length 11
+passforge rotate "p@sSwor4" --count 5 --strict-length
+```
+
 ## Tech Stack
 
 | Layer | Choice | Rationale |
@@ -111,18 +127,18 @@ Built for the real world: standalone office machines, legacy systems with forced
 
 | File | What it covers |
 |---|---|
-| [arch.md](arch.md) | Full directory structure, file map, setup/build/run instructions, architecture diagram |
-| [help.md](help.md) | How the internals work — generation, scoring, suggestions, breach checking |
-| [help_ext.md](help_ext.md) | External package reference — cobra, pflag, and notable stdlib usage |
-| [man.md](man.md) | Detailed line-by-line source code documentation |
-| [PLAN.md](PLAN.md) | Implementation plan, platform strategy, milestones, risk register |
+| [arch.md](docs/arch.md) | Full directory structure, file map, setup/build/run instructions, architecture diagram |
+| [help.md](docs/help.md) | How the internals work — generation, scoring, suggestions, breach checking |
+| [help_ext.md](docs/help_ext.md) | External package reference — cobra, pflag, and notable stdlib usage |
+| [man.md](docs/man.md) | Detailed line-by-line source code documentation |
+| [PLAN.md](docs/PLAN.md) | Implementation plan, platform strategy, milestones, risk register |
 
 ## 🔮 Roadmap
 
 | Version | Milestone | Status | Features | Estimate |
 |---|---|---|---|---|
 | **v0.1.0** | Core + CLI | 🟢 Done | Password & passphrase generation, strength scoring (entropy, patterns, dictionary, leet-speak), suggestion engine, HIBP breach check, JSON output, bulk generation, scriptable exit codes | — |
-| **v0.1.5** | Same Same But Different | 🔵 Next | Rotation variant engine (`passforge rotate`), password improvement command (`passforge improve`), strength-gated variant generation | ~1 week |
+| **v0.1.5** | Same Same But Different | 🔵 Next | Rotation variant engine (`passforge rotate`), variable-length variants (`--min-length`/`--max-length`/`--strict-length`), password improvement command (`passforge improve`) | ~1 week |
 | **v0.2.0** | CLI Polish | ⚪ Planned | CI pipeline (fmt, vet, staticcheck, test matrix), GoReleaser for cross-compiled binaries, Homebrew tap, shell completions (bash/zsh/fish), expanded dictionary (~100k entries from SecLists) | ~1 week |
 | **v0.3.0** | Web (Fiber) | ⚪ Planned | Fiber v3 server, JSON API (`/api/generate`, `/api/check`, `/api/suggest`), static SPA frontend (HTML + JS/htmx), real-time strength meter, embedded assets via `//go:embed`, Docker image | ~2 weeks |
 | **v0.4.0** | Desktop (Fyne) | ⚪ Planned | Fyne GUI app, Generate / Check / Suggest tabs, clipboard copy with auto-clear timer, cross-platform packaging (.app, .exe, .tar.gz) | ~2 weeks |
@@ -140,7 +156,7 @@ Built for the real world: standalone office machines, legacy systems with forced
 | ⚪ | Planned |
 | 🔮 | Future / experimental |
 
-> For the full implementation plan, architecture decisions, and risk register, see [PLAN.md](PLAN.md).
+> For the full implementation plan, architecture decisions, and risk register, see [PLAN.md](docs/PLAN.md).
 
 ## License
 
@@ -148,4 +164,4 @@ MIT — because good security tools should be free and auditable.
 
 ## Contributing
 
-Contributions welcome. See [PLAN.md](PLAN.md) for the roadmap and architecture. Bring your own entropy.
+Contributions welcome. See [PLAN.md](docs/PLAN.md) for the roadmap and architecture. Bring your own entropy.

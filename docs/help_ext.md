@@ -2,6 +2,9 @@
 
 Reference for all third-party dependencies used by PassForge.
 
+> **Same Same But Different** — PassForge's signature rotation engine. One strong base, many unique variants.
+> `p@sSwor4 → P@sswor4 → pAs$wor4 → p@ssWor4 → pa$Swor4`
+
 ---
 
 ## Direct Dependencies

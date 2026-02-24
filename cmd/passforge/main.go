@@ -107,7 +107,7 @@ func checkCmd() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "Warning: breach check failed: %v\n", err)
 				} else if breached {
 					result.Breached = true
-					result.Score = min(result.Score, 10)
+					result.Score = min(result.Score, core.BreachScoreCap)
 					result.Label = core.LabelForScore(result.Score)
 					result.Penalties = append(result.Penalties, "found in data breach")
 					result.Suggestions = append(result.Suggestions, "This password appeared in a data breach — do not use it")
@@ -137,7 +137,7 @@ func checkCmd() *cobra.Command {
 			if result.Breached {
 				os.Exit(2)
 			}
-			if result.Score < 40 {
+			if result.Score < core.WeakThreshold {
 				os.Exit(1)
 			}
 			return nil
@@ -183,17 +183,17 @@ func suggestCmd() *cobra.Command {
 }
 
 func rotateCmd() *cobra.Command {
-	var count int
+	cfg := core.DefaultRotateConfig()
 
 	cmd := &cobra.Command{
 		Use:     "rotate [password]",
 		Aliases: []string{"ssbd"},
 		Short:   "Same Same But Different — generate rotation variants of a password",
-		Long:    "Generate a sequence of password variants that cycle leet-speak substitutions, case positions, and symbol placements. Each variant looks different but stays recognizable. Built for forced password rotation policies.",
+		Long:    "Generate a sequence of password variants that cycle leet-speak substitutions, case positions, and symbol placements. Each variant looks different but stays recognizable. Built for forced password rotation policies.\n\nWith --min-length and --max-length, variants can grow or shrink by up to 3 characters via insertions, appends, prepends, or repeat-dropping.",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			password := args[0]
-			variants, err := core.Rotate(password, count)
+			variants, err := core.RotateWithConfig(password, cfg)
 			if err != nil {
 				return err
 			}
@@ -212,7 +212,10 @@ func rotateCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVarP(&count, "count", "n", 5, "number of variants to generate")
+	cmd.Flags().IntVarP(&cfg.Count, "count", "n", cfg.Count, "number of variants to generate")
+	cmd.Flags().IntVar(&cfg.MinLength, "min-length", 0, "minimum variant length (default: same as input)")
+	cmd.Flags().IntVar(&cfg.MaxLength, "max-length", 0, "maximum variant length (default: same as input)")
+	cmd.Flags().BoolVar(&cfg.StrictLength, "strict-length", false, "force all variants to match input length exactly")
 
 	return cmd
 }
@@ -245,7 +248,7 @@ func bulkCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVarP(&count, "count", "n", 10, "number of passwords to generate")
+	cmd.Flags().IntVarP(&count, "count", "n", core.DefaultBulkCount, "number of passwords to generate")
 	cmd.Flags().IntVarP(&cfg.Length, "length", "l", cfg.Length, "password length")
 	cmd.Flags().BoolVar(&cfg.Uppercase, "upper", cfg.Uppercase, "include uppercase letters")
 	cmd.Flags().BoolVar(&cfg.Lowercase, "lower", cfg.Lowercase, "include lowercase letters")

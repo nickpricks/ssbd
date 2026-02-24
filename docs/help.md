@@ -2,6 +2,9 @@
 
 How the core library works, explained simply.
 
+> **Same Same But Different** — PassForge's signature rotation engine. One strong base, many unique variants.
+> `p@sSwor4 → P@sswor4 → pAs$wor4 → p@ssWor4 → pa$Swor4`
+
 ---
 
 ## Data Flow
@@ -14,7 +17,8 @@ User Input → CLI (cobra) → Core Library → Output (text/JSON)
                               ├── suggester.go   → improvement suggestions
                               ├── hibp.go        → breach check (optional)
                               ├── dictionary.go  → common password lookup
-                              └── wordlist.go    → EFF wordlist for passphrases
+                              ├── wordlist.go    → EFF wordlist for passphrases
+                              └── rotator.go     → "Same Same But Different" variants
 ```
 
 ---
@@ -100,6 +104,52 @@ This is optional — enabled via `--breach` flag. Fails gracefully if the API is
 
 ---
 
+## Rotation Variants — "Same Same But Different" (`rotator.go`)
+
+Generates unique password variants for forced rotation policies. You keep one strong base password; PassForge produces variants that look different but share the same muscle memory.
+
+### Substitution mutations (v1 — same length)
+
+1. **Find mutation points** — scan the base password for positions that can be varied:
+   - Letters can be case-flipped (`a` ↔ `A`)
+   - Letters can be leet-substituted (`a` → `@`, `s` → `$`)
+   - Leet characters can be reversed (`@` → `a`, `$` → `s`)
+2. **Mixed-radix enumeration** — each cycle number maps to a unique combination of mutations. The cycle is treated as a mixed-radix number where each digit selects which form to use at each position.
+3. **Deduplication** — a `seen` map ensures no variant matches the base or any previous variant.
+4. **Safety cap** — if the password has few mutation points, generation stops when the variant space is exhausted.
+
+```
+passforge rotate "p@sSwor4" --count 5
+1: P@sswor4
+2: pAs$wor4
+3: p@ssWor4
+4: pa$Swor4
+5: P@sSWor4
+```
+
+### Length mutations (v2 — variable length)
+
+When `--min-length` and/or `--max-length` are provided, variants can grow or shrink by up to 3 characters:
+
+1. **Find length mutation candidates** — scan the base for:
+   - **Insert positions** — up to 8 evenly-spaced gaps where a random char can be inserted (pool chosen contextually from neighbors)
+   - **Append/prepend** — always available, using digits and symbols
+   - **Drop-repeat** — consecutive repeated characters (`aa`, `ss`) where one can be removed
+2. **Two-phase pipeline** — each variant is built by first applying a substitution mutation cycle, then applying one or more length mutations (insert, append, prepend, or drop)
+3. **Bounds enforcement** — every variant's length is checked against `[min-length, max-length]`. The delta from base is clamped to ±3 characters.
+4. **`--strict-length`** — forces all variants to match the base length exactly (v1 behavior)
+
+```
+passforge rotate "p@sSwor4" --count 5 --min-length 8 --max-length 11
+1: P@sSwor4
+2: P@sSwor4:
+3: !P@sSwor4?
+4: ^uP@sSwor4:
+5: !P@sSwor4
+```
+
+---
+
 ## CLI Layer (`cmd/passforge/main.go`)
 
 Thin wrapper that maps cobra subcommands to core library calls:
@@ -110,6 +160,7 @@ Thin wrapper that maps cobra subcommands to core library calls:
 | `passphrase` | `core.GeneratePassphrase(cfg)` | EFF wordlist passphrase |
 | `check` | `core.Score(pw)` + optional `HIBP` | Strength check |
 | `suggest` | `core.Score(pw)` (includes suggestions) | Improvement tips |
+| `rotate` / `ssbd` | `core.RotateWithConfig(pw, cfg)` | Rotation variants (Same Same But Different) |
 | `bulk` | `core.Generate(cfg)` in a loop | Multiple passwords |
 
 Exit codes: `0` = strong, `1` = weak (score < 40), `2` = breached.

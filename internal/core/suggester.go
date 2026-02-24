@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 )
@@ -9,11 +10,11 @@ import (
 func Suggest(password string, result ScoreResult) []string {
 	var suggestions []string
 
-	if len(password) < 12 {
-		suggestions = append(suggestions, "Increase length to at least 12 characters")
+	if len(password) < LengthBonusThreshold {
+		suggestions = append(suggestions, fmt.Sprintf("Increase length to at least %d characters", LengthBonusThreshold))
 	}
-	if len(password) < 16 && len(password) >= 12 {
-		suggestions = append(suggestions, "Consider increasing length to 16+ characters for extra strength")
+	if len(password) < DefaultPasswordLength && len(password) >= LengthBonusThreshold {
+		suggestions = append(suggestions, fmt.Sprintf("Consider increasing length to %d+ characters for extra strength", DefaultPasswordLength))
 	}
 
 	if !hasCharClass(password, unicode.IsUpper) {
@@ -48,7 +49,7 @@ func Suggest(password string, result ScoreResult) []string {
 		suggestions = append(suggestions, "This password appeared in a data breach — do not use it")
 	}
 
-	if len(suggestions) == 0 && result.Score < 80 {
+	if len(suggestions) == 0 && result.Score < VeryStrongThreshold {
 		suggestions = append(suggestions, "Consider using a randomly generated password or passphrase")
 	}
 

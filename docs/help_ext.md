@@ -43,6 +43,18 @@ cmd.Flags().IntVarP(&cfg.Length, "length", "l", cfg.Length, "password length")
 
 ---
 
+### `golang.org/x/term` v0.40.0
+
+**What it is:** Part of the extended Go standard library ("x" sub-repository). It provides primitives to manipulate terminal state.
+
+**What it does for us:** Provides the secure "hidden echo" password input (`term.ReadPassword`), ensuring passwords typed interactively into commands like `check` and `rotate` don't leak into terminal history or standard CLI output.
+
+**Where it's used:** `cmd/passforge/main.go`
+
+**Docs:** https://pkg.go.dev/golang.org/x/term
+
+---
+
 ## Indirect Dependencies
 
 These are pulled in automatically by cobra. You don't import them directly, but they're in `go.sum`.
@@ -102,3 +114,11 @@ Used in `cmd/passforge/main.go`. Handles `--json` output formatting with `json.N
 ### `sync`
 
 Used in `wordlist.go` and `dictionary.go`. `sync.Once` ensures the wordlist and common-passwords set are loaded exactly once, even if called concurrently. This is a thread-safe lazy initialization pattern.
+
+### `io`
+
+Used in `hibp.go`. The `io.LimitReader` enforces a strict 1 MiB cap on the response payload read from the HIBP API. This defends against decompression-bomb and resource exhaustion (DoS) attacks.
+
+### `unicode/utf8`
+
+Used in `scorer.go` and `suggester.go`. We process text using `utf8.RuneCountInString` to properly evaluate password strength and generation bounds accurately across multi-byte Unicode strings (e.g., emojis and non-Latin scripts), rather than naive byte counting.

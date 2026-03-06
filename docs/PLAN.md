@@ -13,6 +13,7 @@
 - [6. Stretch Goals](#6-stretch-goals)
 - [7. Milestone Roadmap](#7-milestone-roadmap)
 - [8. Risk Register](#8-risk-register)
+- [9. Code Review Findings](#9-code-review-findings)
 
 ---
 
@@ -171,7 +172,7 @@ Nice-to-have ideas **not committed to any milestone**.
   - `all-clean` composite target runs `clean` then `all` (vet + test + bench) for a full reset-and-verify cycle
   - ⚠️ **Windows note:** `rm -f` is a Unix command. On PowerShell it works via the `Remove-Item` alias, but `-f` is interpreted as `-Force`, which is compatible. The `&&` operator requires PowerShell 7+. For broader Windows compat, consider `go clean --cache; if ($?) { Remove-Item -Force -ErrorAction SilentlyContinue passforge }` or use `cmd /c` in the Makefile.
 
-### M1.5: SSBD + CLI Extras (Go)
+### M1.5: SSBD + CLI Extras (Go) — Done
 
 - [x] `rotator.go` — rotation variant engine ("Same Same But Different")
   - Substitution-map cycling (leet/case/symbol)
@@ -184,12 +185,30 @@ Nice-to-have ideas **not committed to any milestone**.
   - Length-changing mutations: insert random chars, append/prepend symbols, drop redundant repeats
   - Variants can grow or shrink by 1-3 chars within bounds
   - `--strict-length` flag for exact-length matching (current behavior, backward compat)
-- [ ] `improve.go` — password improvement engine
-  - Preserve recognizable structure, inject missing classes, extend length, break patterns
-  - CLI: `passforge improve <password>`
+
+### M1.6: Security Hardening (from [Code Review](Claude-review.md))
+
+- [x] **P1 — Critical: Stdin password input** — read from stdin or prompt with hidden echo to avoid process-table exposure (`cmd/passforge/main.go`)
+- [x] **P2 — Critical: HIBP hard-fail** — when `--breach` is explicit and the check fails, exit with code 3 instead of degrading to "not breached." Add `--breach-warn-only` for soft-failure opt-in (`cmd/passforge/main.go`)
+- [x] **P3 — High: `io.LimitReader` on HIBP response** — cap response read at 1 MiB to prevent OOM from malicious server (`internal/core/hibp.go`)
+- [x] **P4 — High: Keyboard walk penalty iteration** — iterate largest-to-smallest window to catch `qwertyuiop` as a large walk, not just `qwer` as a small one (`internal/core/scorer.go`)
+- [x] **P5 — Medium: `ScoreResult.MarkBreached()` method** — atomic breach marking to prevent inconsistent Score/Label pairs (`internal/core/scorer.go`)
+- [x] **P6 — High: Rune-based entropy scoring** — use `utf8.RuneCountInString()` instead of `len()` in entropy calculation and suggester (`internal/core/scorer.go`, `internal/core/suggester.go`)
+- [x] **P7 — Medium: Distinct exit codes** — 0 = strong, 1 = weak, 2 = breached, 3 = operational error; return typed errors from `RunE`, handle exit codes in `main()` (`cmd/passforge/main.go`)
+- [x] **P8 — Low: Wordlist size validation** — validate minimum word count after parsing to catch silent data loss (`internal/core/wordlist.go`)
+- [x] **P9 — Medium: Typed errors in rotator** — distinguish recoverable constraint errors from fatal `crypto/rand` failures (`internal/core/rotator.go`)
+- [x] **P10 — Medium: Config `Validate()` methods** — add validation to `GeneratorConfig`, `PassphraseConfig`, `RotateConfig` to catch zero-value and invalid states early
+- [x] Fix `SymbolPoolSize` (32 → 31) (`internal/core/scorer.go`)
+- [x] Remove `normalizeBase` dead code or move to test file (`internal/core/rotator.go`)
+- [x] Move `NoOpChecker` to test file (`internal/core/hibp.go`)
+- [x] Eliminate global `jsonOutput` var — pass via command context or struct (`cmd/passforge/main.go`)
+- [x] Boolean flag UX — consider `--no-upper`, `--no-lower` pattern for disabling defaults
 
 ### M1.x: CLI Polish
 
+- [ ] `improve.go` — password improvement engine
+  - Preserve recognizable structure, inject missing classes, extend length, break patterns
+  - CLI: `passforge improve <password>`
 - [ ] Scoring gate — reject variants that fall below a configurable strength threshold
   - Filter `Rotate()` output through `Score()`, keep only variants >= threshold
   - CLI: `--min-score` flag on `rotate` command
@@ -241,11 +260,29 @@ Nice-to-have ideas **not committed to any milestone**.
 
 ---
 
+## 9. Code Review Findings
+
+A full automated code review was performed on 2026-03-05 using three specialized agents (code review, silent failure analysis, type design analysis). The review identified 2 critical, 3 high, 6 medium, and 4 low severity issues.
+
+The findings are tracked as **M1.6: Security Hardening** in the roadmap above. For the complete review with code samples, recommendations, and type design ratings, see [Claude-review.md](Claude-review.md).
+
+**Key themes:**
+- **Security** — passwords visible in process args, HIBP failures silently downgraded
+- **Correctness** — byte-vs-rune length, keyboard walk penalty returns early
+- **Robustness** — unbounded HTTP reads, crypto errors swallowed, config zero-values are invalid
+- **Code quality** — global mutable state, mock in production code, dead code
+
+**Positive observations:** crypto usage is correct, k-anonymity for HIBP, embedded wordlist, `sync.Once` lazy loading, clean architecture, 85%+ test coverage on core.
+
+---
+
 ## Summary
 
 1. **Go CLI shipped.** Core library + 6 commands + SSBD rotation engine.
-2. **Fiber for web** — next major milestone.
-3. **Fyne for desktop** — after web.
-4. **Rust/WASM deferred** — Go proves the product first.
-5. **Never store passwords.** Stateless generator and checker, not a vault.
-6. **Open source.** MIT license.
+2. **Security hardening next** — address critical/high findings from code review (M1.6).
+3. **CLI polish** — `improve` command, scoring gate, CI pipeline (M1.x/M2.0).
+4. **Fiber for web** — next major feature milestone.
+5. **Fyne for desktop** — after web.
+6. **Rust/WASM deferred** — Go proves the product first.
+7. **Never store passwords.** Stateless generator and checker, not a vault.
+8. **Open source.** MIT license.

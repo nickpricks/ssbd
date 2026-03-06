@@ -2,49 +2,110 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/passforge/passforge/internal/core"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
-var jsonOutput bool
-
 func main() {
+	var jsonOutput bool
+
 	rootCmd := &cobra.Command{
-		Use:   "passforge",
-		Short: "Password generator, strength checker, and suggestion engine",
-		Long:  "PassForge generates strong passwords, scores their strength, and provides actionable suggestions to improve weak ones.",
+		Use:           "passforge",
+		Short:         "Password generator, strength checker, and suggestion engine",
+		Long:          "PassForge generates strong passwords, scores their strength, and provides actionable suggestions to improve weak ones.",
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "output in JSON format")
 
-	rootCmd.AddCommand(generateCmd())
-	rootCmd.AddCommand(passphraseCmd())
-	rootCmd.AddCommand(checkCmd())
-	rootCmd.AddCommand(suggestCmd())
-	rootCmd.AddCommand(rotateCmd())
-	rootCmd.AddCommand(bulkCmd())
+	rootCmd.AddCommand(generateCmd(&jsonOutput))
+	rootCmd.AddCommand(passphraseCmd(&jsonOutput))
+	rootCmd.AddCommand(checkCmd(&jsonOutput))
+	rootCmd.AddCommand(suggestCmd(&jsonOutput))
+	rootCmd.AddCommand(rotateCmd(&jsonOutput))
+	rootCmd.AddCommand(bulkCmd(&jsonOutput))
 
 	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+		if errors.Is(err, core.ErrBreached) {
+			os.Exit(2)
+		} else if errors.Is(err, core.ErrWeak) {
+			os.Exit(1)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(3) // Operational error
+		}
 	}
 }
 
-func generateCmd() *cobra.Command {
+func getPassword(args []string) (string, error) {
+	if len(args) == 1 && args[0] != "-" {
+		return args[0], nil
+	}
+
+	stat, _ := os.Stdin.Stat()
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		// Piped from stdin
+		bytes, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", fmt.Errorf(core.MsgErrReadingStdin, err)
+		}
+		return strings.TrimSpace(string(bytes)), nil
+	}
+
+	// Prompt interactively with hidden echo
+	fmt.Fprintf(os.Stderr, "Enter password: ")
+	bytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+	if err != nil {
+		return "", fmt.Errorf(core.MsgErrReadingPassword, err)
+	}
+	fmt.Fprintln(os.Stderr)
+	return string(bytes), nil
+}
+
+func printJSON(v any) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
+}
+
+func generateCmd(jsonOutput *bool) *cobra.Command {
 	cfg := core.DefaultGeneratorConfig()
+	var noUpper, noLower, noDigits, noSymbols bool
 
 	cmd := &cobra.Command{
 		Use:   "generate",
 		Short: "Generate a random password",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if noUpper {
+				cfg.Uppercase = false
+			}
+			if noLower {
+				cfg.Lowercase = false
+			}
+			if noDigits {
+				cfg.Digits = false
+			}
+			if noSymbols {
+				cfg.Symbols = false
+			}
+
+			if err := cfg.Validate(); err != nil {
+				return err
+			}
+
 			pw, err := core.Generate(cfg)
 			if err != nil {
 				return err
 			}
-			if jsonOutput {
+			if *jsonOutput {
 				return printJSON(map[string]any{"password": pw})
 			}
 			fmt.Println(pw)
@@ -53,27 +114,31 @@ func generateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().IntVarP(&cfg.Length, "length", "l", cfg.Length, "password length")
-	cmd.Flags().BoolVar(&cfg.Uppercase, "upper", cfg.Uppercase, "include uppercase letters")
-	cmd.Flags().BoolVar(&cfg.Lowercase, "lower", cfg.Lowercase, "include lowercase letters")
-	cmd.Flags().BoolVar(&cfg.Digits, "digits", cfg.Digits, "include digits")
-	cmd.Flags().BoolVar(&cfg.Symbols, "symbols", cfg.Symbols, "include symbols")
+	cmd.Flags().BoolVar(&noUpper, "no-upper", false, "exclude uppercase letters")
+	cmd.Flags().BoolVar(&noLower, "no-lower", false, "exclude lowercase letters")
+	cmd.Flags().BoolVar(&noDigits, "no-digits", false, "exclude digits")
+	cmd.Flags().BoolVar(&noSymbols, "no-symbols", false, "exclude symbols")
 	cmd.Flags().StringVar(&cfg.ExcludeChars, "exclude", "", "characters to exclude")
 
 	return cmd
 }
 
-func passphraseCmd() *cobra.Command {
+func passphraseCmd(jsonOutput *bool) *cobra.Command {
 	cfg := core.DefaultPassphraseConfig()
 
 	cmd := &cobra.Command{
 		Use:   "passphrase",
 		Short: "Generate a passphrase from the EFF wordlist",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := cfg.Validate(); err != nil {
+				return err
+			}
+
 			pp, err := core.GeneratePassphrase(cfg)
 			if err != nil {
 				return err
 			}
-			if jsonOutput {
+			if *jsonOutput {
 				return printJSON(map[string]any{"passphrase": pp})
 			}
 			fmt.Println(pp)
@@ -89,32 +154,37 @@ func passphraseCmd() *cobra.Command {
 	return cmd
 }
 
-func checkCmd() *cobra.Command {
+func checkCmd(jsonOutput *bool) *cobra.Command {
 	var breachCheck bool
+	var breachWarnOnly bool
 
 	cmd := &cobra.Command{
-		Use:   "check [password]",
+		Use:   "check [password|-]",
 		Short: "Check the strength of a password",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			password := args[0]
+			password, err := getPassword(args)
+			if err != nil {
+				return err
+			}
+
 			result := core.Score(password)
 
 			if breachCheck {
 				checker := core.NewHIBPChecker()
 				breached, err := checker.IsBreached(password)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: breach check failed: %v\n", err)
+					if breachWarnOnly {
+						fmt.Fprintf(os.Stderr, core.MsgWarnBreachFailed, err)
+					} else {
+						return fmt.Errorf(core.MsgErrBreachInconclusive, err)
+					}
 				} else if breached {
-					result.Breached = true
-					result.Score = min(result.Score, core.BreachScoreCap)
-					result.Label = core.LabelForScore(result.Score)
-					result.Penalties = append(result.Penalties, "found in data breach")
-					result.Suggestions = append(result.Suggestions, "This password appeared in a data breach — do not use it")
+					result.MarkBreached()
 				}
 			}
 
-			if jsonOutput {
+			if *jsonOutput {
 				return printJSON(result)
 			}
 
@@ -133,32 +203,36 @@ func checkCmd() *cobra.Command {
 				fmt.Println("BREACHED: This password has appeared in a known data breach!")
 			}
 
-			// Exit code based on strength
 			if result.Breached {
-				os.Exit(2)
+				return core.ErrBreached
 			}
 			if result.Score < core.WeakThreshold {
-				os.Exit(1)
+				return core.ErrWeak
 			}
 			return nil
 		},
 	}
 
 	cmd.Flags().BoolVar(&breachCheck, "breach", false, "check against Have I Been Pwned")
+	cmd.Flags().BoolVar(&breachWarnOnly, "breach-warn-only", false, "do not fail if breach check is inconclusive")
 
 	return cmd
 }
 
-func suggestCmd() *cobra.Command {
+func suggestCmd(jsonOutput *bool) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "suggest [password]",
+		Use:   "suggest [password|-]",
 		Short: "Get suggestions to improve a weak password",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			password := args[0]
+			password, err := getPassword(args)
+			if err != nil {
+				return err
+			}
+
 			result := core.Score(password)
 
-			if jsonOutput {
+			if *jsonOutput {
 				return printJSON(map[string]any{
 					"score":       result.Score,
 					"label":       result.Label,
@@ -182,23 +256,31 @@ func suggestCmd() *cobra.Command {
 	return cmd
 }
 
-func rotateCmd() *cobra.Command {
+func rotateCmd(jsonOutput *bool) *cobra.Command {
 	cfg := core.DefaultRotateConfig()
 
 	cmd := &cobra.Command{
-		Use:     "rotate [password]",
+		Use:     "rotate [password|-]",
 		Aliases: []string{"ssbd"},
 		Short:   "Same Same But Different — generate rotation variants of a password",
 		Long:    "Generate a sequence of password variants that cycle leet-speak substitutions, case positions, and symbol placements. Each variant looks different but stays recognizable. Built for forced password rotation policies.\n\nWith --min-length and --max-length, variants can grow or shrink by up to 3 characters via insertions, appends, prepends, or repeat-dropping.",
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			password := args[0]
+			if err := cfg.Validate(); err != nil {
+				return err
+			}
+
+			password, err := getPassword(args)
+			if err != nil {
+				return err
+			}
+
 			variants, err := core.RotateWithConfig(password, cfg)
 			if err != nil {
 				return err
 			}
 
-			if jsonOutput {
+			if *jsonOutput {
 				return printJSON(map[string]any{
 					"base":     password,
 					"variants": variants,
@@ -220,14 +302,32 @@ func rotateCmd() *cobra.Command {
 	return cmd
 }
 
-func bulkCmd() *cobra.Command {
+func bulkCmd(jsonOutput *bool) *cobra.Command {
 	cfg := core.DefaultGeneratorConfig()
 	var count int
+	var noUpper, noLower, noDigits, noSymbols bool
 
 	cmd := &cobra.Command{
 		Use:   "bulk",
 		Short: "Generate multiple passwords at once",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if noUpper {
+				cfg.Uppercase = false
+			}
+			if noLower {
+				cfg.Lowercase = false
+			}
+			if noDigits {
+				cfg.Digits = false
+			}
+			if noSymbols {
+				cfg.Symbols = false
+			}
+
+			if err := cfg.Validate(); err != nil {
+				return err
+			}
+
 			passwords := make([]string, 0, count)
 			for i := 0; i < count; i++ {
 				pw, err := core.Generate(cfg)
@@ -237,7 +337,7 @@ func bulkCmd() *cobra.Command {
 				passwords = append(passwords, pw)
 			}
 
-			if jsonOutput {
+			if *jsonOutput {
 				return printJSON(map[string]any{"passwords": passwords})
 			}
 
@@ -250,17 +350,11 @@ func bulkCmd() *cobra.Command {
 
 	cmd.Flags().IntVarP(&count, "count", "n", core.DefaultBulkCount, "number of passwords to generate")
 	cmd.Flags().IntVarP(&cfg.Length, "length", "l", cfg.Length, "password length")
-	cmd.Flags().BoolVar(&cfg.Uppercase, "upper", cfg.Uppercase, "include uppercase letters")
-	cmd.Flags().BoolVar(&cfg.Lowercase, "lower", cfg.Lowercase, "include lowercase letters")
-	cmd.Flags().BoolVar(&cfg.Digits, "digits", cfg.Digits, "include digits")
-	cmd.Flags().BoolVar(&cfg.Symbols, "symbols", cfg.Symbols, "include symbols")
+	cmd.Flags().BoolVar(&noUpper, "no-upper", false, "exclude uppercase letters")
+	cmd.Flags().BoolVar(&noLower, "no-lower", false, "exclude lowercase letters")
+	cmd.Flags().BoolVar(&noDigits, "no-digits", false, "exclude digits")
+	cmd.Flags().BoolVar(&noSymbols, "no-symbols", false, "exclude symbols")
 	cmd.Flags().StringVar(&cfg.ExcludeChars, "exclude", "", "characters to exclude")
 
 	return cmd
-}
-
-func printJSON(v any) error {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
 }

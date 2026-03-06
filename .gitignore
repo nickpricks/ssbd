@@ -41,8 +41,10 @@ Thumbs.db
 *.pem
 *.key
 
-# Claude Code
+# AI Agents
 .claude/
+.agent/
+.gemini/
 
 # OS files
 *.log

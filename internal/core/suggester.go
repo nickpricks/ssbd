@@ -4,16 +4,18 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Suggest returns actionable suggestions to improve a password given its score result.
 func Suggest(password string, result ScoreResult) []string {
 	var suggestions []string
 
-	if len(password) < LengthBonusThreshold {
+	runeCount := utf8.RuneCountInString(password)
+	if runeCount < LengthBonusThreshold {
 		suggestions = append(suggestions, fmt.Sprintf("Increase length to at least %d characters", LengthBonusThreshold))
 	}
-	if len(password) < DefaultPasswordLength && len(password) >= LengthBonusThreshold {
+	if runeCount < DefaultPasswordLength && runeCount >= LengthBonusThreshold {
 		suggestions = append(suggestions, fmt.Sprintf("Consider increasing length to %d+ characters for extra strength", DefaultPasswordLength))
 	}
 

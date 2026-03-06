@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Common leet-speak substitutions for normalization.
@@ -64,8 +65,9 @@ func Score(password string) ScoreResult {
 	}
 
 	// Length bonus
-	if len(password) > LengthBonusThreshold {
-		bonus := int(math.Min(float64((len(password)-LengthBonusThreshold)*LengthBonusMultiplier), float64(LengthBonusMax)))
+	runeCount := utf8.RuneCountInString(password)
+	if runeCount > LengthBonusThreshold {
+		bonus := int(math.Min(float64((runeCount-LengthBonusThreshold)*LengthBonusMultiplier), float64(LengthBonusMax)))
 		score += bonus
 	}
 
@@ -96,7 +98,7 @@ func calculateEntropy(password string) float64 {
 	if poolSize <= 1 {
 		return 0
 	}
-	return float64(len(password)) * math.Log2(float64(poolSize))
+	return float64(utf8.RuneCountInString(password)) * math.Log2(float64(poolSize))
 }
 
 func characterPoolSize(password string) int {
@@ -125,7 +127,7 @@ func characterPoolSize(password string) int {
 		pool += 10
 	}
 	if hasSymbol {
-		pool += 32
+		pool += 31
 	}
 	return pool
 }
@@ -209,8 +211,8 @@ func keyboardWalkPenalty(password string) int {
 	lower := strings.ToLower(password)
 
 	for _, row := range keyboardRows {
-		// Check for substrings of length 4+ from keyboard rows
-		for windowSize := 4; windowSize <= len(row); windowSize++ {
+		// Check for substrings of length 4+ from keyboard rows, largest first
+		for windowSize := len(row); windowSize >= 4; windowSize-- {
 			for start := 0; start <= len(row)-windowSize; start++ {
 				pattern := row[start : start+windowSize]
 				if strings.Contains(lower, pattern) {
@@ -252,4 +254,36 @@ func reverseString(s string) string {
 		runes[i], runes[j] = runes[j], runes[i]
 	}
 	return string(runes)
+}
+
+// MarkBreached atomically sets the result to breached and applies penalties.
+func (r *ScoreResult) MarkBreached() {
+	r.Breached = true
+	if r.Score > BreachScoreCap {
+		r.Score = BreachScoreCap
+	}
+	r.Label = "Breached"
+
+	// Ensure we don't append duplicates if called multiple times.
+	hasPenalty := false
+	for _, p := range r.Penalties {
+		if p == "found in data breach" {
+			hasPenalty = true
+			break
+		}
+	}
+	if !hasPenalty {
+		r.Penalties = append(r.Penalties, "found in data breach")
+	}
+
+	hasSuggestion := false
+	for _, s := range r.Suggestions {
+		if s == "This password appeared in a data breach — do not use it" {
+			hasSuggestion = true
+			break
+		}
+	}
+	if !hasSuggestion {
+		r.Suggestions = append(r.Suggestions, "This password appeared in a data breach — do not use it")
+	}
 }

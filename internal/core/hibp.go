@@ -36,24 +36,24 @@ func (h *HIBPChecker) IsBreached(password string) (bool, error) {
 	url := "https://api.pwnedpasswords.com/range/" + prefix
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return false, fmt.Errorf("creating request: %w", err)
+		return false, fmt.Errorf(MsgErrCreatingRequest, err)
 	}
 	req.Header.Set("User-Agent", "PassForge-PasswordChecker")
 	req.Header.Set("Add-Padding", "true")
 
 	resp, err := h.Client.Do(req)
 	if err != nil {
-		return false, fmt.Errorf("HIBP API request failed: %w", err)
+		return false, fmt.Errorf(MsgErrHIBPRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("HIBP API returned status %d", resp.StatusCode)
+		return false, fmt.Errorf(MsgErrHIBPStatus, resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return false, fmt.Errorf("reading HIBP response: %w", err)
+		return false, fmt.Errorf(MsgErrHIBPRead, err)
 	}
 
 	lines := strings.Split(string(body), "\n")
@@ -64,12 +64,5 @@ func (h *HIBPChecker) IsBreached(password string) (bool, error) {
 		}
 	}
 
-	return false, nil
-}
-
-// NoOpChecker always returns false. Used for offline mode or testing.
-type NoOpChecker struct{}
-
-func (n *NoOpChecker) IsBreached(_ string) (bool, error) {
 	return false, nil
 }

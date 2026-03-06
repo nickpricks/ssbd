@@ -18,7 +18,8 @@ User Input → CLI (cobra) → Core Library → Output (text/JSON)
                               ├── hibp.go        → breach check (optional)
                               ├── dictionary.go  → common password lookup
                               ├── wordlist.go    → EFF wordlist for passphrases
-                              └── rotator.go     → "Same Same But Different" variants
+                              ├── rotator.go     → "Same Same But Different" variants
+                              └── errors.go      → Centralized messaging and typed errors
 ```
 
 ---
@@ -91,7 +92,7 @@ Uses the Have I Been Pwned Pwned Passwords API with k-anonymity:
 4. Check if our full hash suffix appears in the response
 5. The full password (or full hash) **never leaves the machine**
 
-This is optional — enabled via `--breach` flag. Fails gracefully if the API is unreachable.
+This is optional — enabled via `--breach` flag. Fails gracefully if the API is unreachable. Uses an `io.LimitReader` (1 MiB) to prevent memory-exhaustion attacks from malicious or oversized responses.
 
 ---
 
@@ -163,6 +164,8 @@ Thin wrapper that maps cobra subcommands to core library calls:
 | `rotate` / `ssbd` | `core.RotateWithConfig(pw, cfg)` | Rotation variants (Same Same But Different) |
 | `bulk` | `core.Generate(cfg)` in a loop | Multiple passwords |
 
-Exit codes: `0` = strong, `1` = weak (score < 40), `2` = breached.
+Security feature: Passwords can be passed via stdin (e.g. `echo "pass" | passforge check`) or interactively typed into a hidden prompt inside the terminal, ensuring they don't leak to `ps`/`top` outputs or `.bash_history`.
+
+Exit codes: `0` = strong, `1` = weak (score < 40), `2` = breached, `3` = operational/input error.
 
 All commands support `--json` for machine-readable output.

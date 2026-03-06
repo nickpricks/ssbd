@@ -1,78 +1,133 @@
-# WORKPLAN — PassForge Documentation & Codebase Overhaul
+# WORKPLAN — PassForge v0.1.6: Security Hardening
+
+> Current focus: address critical and high-severity findings from [code review](docs/Claude-review.md).
 
 ---
 
 ## Tracker
 
-| # | Task | Status |
-|---|------|--------|
-| 1 | Move all `.md` files into `docs/` directory | done |
-| 2 | Read all `.md` files to get full project overview | done |
-| 3 | Move "Same Same But Different" (SSBD) algo to the top of all README and docs | done |
-| 4 | Analyze codebase for updates, improvements, and necessary fixes | done |
-| 5 | Update `man.md` with all new content and changes made | done |
-| 6 | Update `man.md` with memory analysis (structs, constants, functions, line-by-line) | done |
+| # | Task | Priority | Status |
+|---|------|----------|--------|
+| 1 | Stdin/prompt password input | Critical | done |
+| 2 | HIBP hard-fail on `--breach` errors | Critical | done |
+| 3 | `io.LimitReader` on HIBP response | High | done |
+| 4 | Keyboard walk penalty fix (largest-first) | High | done |
+| 5 | Rune-based entropy scoring | High | done |
+| 6 | `ScoreResult.MarkBreached()` method | Medium | done |
+| 7 | Distinct exit codes + typed errors from `RunE` | Medium | done |
+| 8 | Typed errors in rotator | Medium | done |
+| 9 | Config `Validate()` methods | Medium | done |
+| 10 | Wordlist size validation | Low | done |
+| 11 | Cleanup: SymbolPoolSize, dead code, NoOpChecker, global state, flag UX | Low | done |
+| 12 | Test coverage: CLI integration, HIBP mock, Unicode, bulk, passphrase | — | done |
+| 13 | Updations of docs/arch (Complete project structure, file reference, and setup guide), docs/man (Line-by-line documentation of every source file in the project.), help (How the core library works, explained simply.), helpext (Reference for all third-party dependencies used by PassForge. with a bit of explanation.) | — | done |
 
 ---
 
 ## Details
 
-### 1. Move `.md` files into `docs/` (done)
-- Created `docs/` directory
-- Moved: `arch.md`, `help.md`, `help_ext.md`, `man.md`, `PLAN.md`
-- Kept `README.md` at project root
-- Updated all cross-references in README.md and arch.md
+### 1. Stdin/prompt password input (Critical)
 
-### 2. Read all `.md` files — full overview (done)
-- All docs read end-to-end
-- Key gap: `rotator.go` / `rotator_test.go` fully implemented but **undocumented** in arch.md, help.md, man.md
-- `passforge improve` mentioned in PLAN.md but not implemented
-- SSBD prominent in README + PLAN but absent from technical docs
+**Files:** `cmd/passforge/main.go`
 
-### 3. SSBD algo — top of all docs (done)
-- Added SSBD blockquote banner to: README.md, arch.md, help.md, help_ext.md, man.md, PLAN.md
+CLI args are visible via `ps aux` / `/proc/<pid>/cmdline`. Read from stdin when `-` is passed or no arg is given; prompt with hidden echo otherwise.
 
-### 4. Codebase analysis (done)
-Build/test status: all pass, 85.6% coverage, no race conditions.
+```bash
+echo "MySecret123!" | passforge check -
+passforge check          # prompts with hidden input
+```
 
-#### Findings (prioritized)
+### 2. HIBP hard-fail (Critical)
 
-**CRITICAL**
-- Wordlist panic on missing embed — `wordlist.go:23` panics instead of returning error
-- No CLI tests — `cmd/passforge/main.go` has 0% coverage
+**Files:** `cmd/passforge/main.go`
 
-**HIGH**
-- HIBP non-200 responses treated as "not breached" — rate limits/outages give false safety
-- No `--exclude` flag validation — invalid Unicode could produce weird output
-- Symbol pool hardcoded as 32 in scorer but actual charset is 31 — entropy slightly off
+When `--breach` is explicit and the check fails (network, HTTP 429/503, DNS), exit with code 3 ("breach check inconclusive") instead of silently proceeding as "not breached." Add `--breach-warn-only` flag for opt-in soft failure.
 
-**MEDIUM**
-- `normalizeBase()` in rotator.go is dead code (only used if exported/tested directly)
-- `NoOpChecker` not exported — no way for users to use offline mode
-- Capitalization edge case: empty word in passphrase would panic
-- Magic numbers throughout scorer.go — no named constants
+### 3. `io.LimitReader` on HIBP response (High)
 
-**LOW**
-- Keyboard walk detection is O(n^2) — fine for passwords, but could optimize
-- Missing godoc on all public types in config.go
-- No integration tests for CLI exit codes / JSON output
+**File:** `internal/core/hibp.go:54`
 
-### 5. Update `man.md` with new content
-- Reflect all changes made in steps 1-4
-- Add full `rotator.go` documentation (currently missing entirely)
-- Update file paths (now under `docs/`)
-- Document the `rotate` CLI command in main.go section
-- Add any new functions, flags, or behaviors discovered
+```go
+body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MiB cap
+```
 
-### 6. Memory analysis in `man.md`
-- For each `.go` file, document:
-  - Every struct and its fields — size, alignment, purpose
-  - Every constant/var — type, value, memory footprint
-  - Every function — signature, allocations, hot paths
-  - Line-by-line annotation where meaningful
-- Include estimated memory usage per struct instance
-- Note any optimization opportunities
+### 4. Keyboard walk penalty fix (High)
+
+**File:** `internal/core/scorer.go:211-233`
+
+Iterate from largest to smallest window size so `qwertyuiop` (10 chars) returns `KeyboardPenaltyLarge` instead of matching `qwer` first at window size 4.
+
+### 5. Rune-based entropy scoring (High)
+
+**Files:** `internal/core/scorer.go:99,67` · `internal/core/suggester.go:13`
+
+Replace `len(password)` with `utf8.RuneCountInString(password)` for correct entropy on multi-byte Unicode input.
+
+### 6. `ScoreResult.MarkBreached()` (Medium)
+
+**File:** `internal/core/scorer.go` (new method)
+
+Atomic method to set `Breached`, cap `Score`, update `Label`, append penalty and suggestion — prevents inconsistent state from manual field mutation.
+
+### 7. Distinct exit codes (Medium)
+
+**File:** `cmd/passforge/main.go`
+
+- 0 = strong, 1 = weak, 2 = breached, 3 = operational error
+- Return typed errors from `RunE`, handle exit codes in `main()` after `Execute()`
+- Remove `os.Exit` calls inside Cobra handlers
+
+### 8. Typed errors in rotator (Medium)
+
+**File:** `internal/core/rotator.go`
+
+Distinguish recoverable constraint errors from fatal `crypto/rand` failures so callers know when to retry vs. abort.
+
+### 9. Config `Validate()` methods (Medium)
+
+Add `Validate()` to `GeneratorConfig`, `PassphraseConfig`, `RotateConfig` to catch zero-value and invalid states early rather than deferring to consumer functions.
+
+### 10. Wordlist size validation (Low)
+
+**File:** `internal/core/wordlist.go`
+
+After parsing, validate a minimum word count (~7000) to catch silent data loss from format corruption.
+
+### 11. Cleanup items (Low)
+
+- Fix `SymbolPoolSize` 32 → 31 (`internal/core/scorer.go`)
+- Remove `normalizeBase` dead code or move to test file (`internal/core/rotator.go`)
+- Move `NoOpChecker` to test file (`internal/core/hibp.go`)
+- Eliminate global `jsonOutput` var — pass via command context or struct
+- Consider `--no-upper`, `--no-lower` flag pattern for disabling defaults
+
+### 12. Test coverage gaps
+
+| Area | Gap |
+|------|-----|
+| CLI integration | No tests for exit codes or JSON output |
+| HIBP checker | No mock HTTP server tests |
+| Unicode | No multi-byte character tests for scorer |
+| `bulkCmd` | Untested |
+| `GeneratePassphrase` | `AddNumber: true` path untested |
+| `cryptoRandInt` | Error paths untested |
+| Rotator | Partial-result-with-error path untested |
 
 ---
 
-*Updated as tasks complete.*
+## After v0.1.6
+
+The following are deferred to **M1.x / v0.2.0 (CLI Polish)**:
+
+- `improve.go` — password improvement engine (`passforge improve`)
+- Scoring gate — `--min-score` flag on `rotate`
+- CI pipeline (fmt, vet, staticcheck, test matrix)
+- GoReleaser + Homebrew tap
+- Expanded dictionary (~100k SecLists)
+- Shell completions (bash/zsh/fish)
+
+See [PLAN.md](docs/PLAN.md) for the full roadmap.
+
+---
+
+*Updated 2026-03-06.*

@@ -17,17 +17,17 @@ const (
 // Generate produces a cryptographically random password based on the given config.
 func Generate(cfg GeneratorConfig) (string, error) {
 	if cfg.Length < 1 {
-		return "", fmt.Errorf("password length must be at least 1")
+		return "", fmt.Errorf(MsgErrPasswordLength1)
 	}
 
 	enabledClasses := countEnabledClasses(cfg)
 	if cfg.Length < enabledClasses {
-		return "", fmt.Errorf("password length %d is too short to include all %d enabled character classes", cfg.Length, enabledClasses)
+		return "", fmt.Errorf(MsgErrLengthTooShort, cfg.Length, enabledClasses)
 	}
 
 	charset := buildCharset(cfg)
 	if len(charset) == 0 {
-		return "", fmt.Errorf("no characters available: enable at least one character class")
+		return "", fmt.Errorf(MsgErrNoCharset)
 	}
 
 	password := make([]byte, cfg.Length)
@@ -38,13 +38,13 @@ func Generate(cfg GeneratorConfig) (string, error) {
 	classes := enabledClassChars(cfg)
 	positions, err := randomPermutation(cfg.Length, len(classes))
 	if err != nil {
-		return "", fmt.Errorf("crypto/rand failed: %w", err)
+		return "", fmt.Errorf(MsgErrCryptoRand, err)
 	}
 	reserved := make(map[int]bool, len(positions))
 	for i, cls := range classes {
 		charIdx, err := cryptoRandInt(len(cls))
 		if err != nil {
-			return "", fmt.Errorf("crypto/rand failed: %w", err)
+			return "", fmt.Errorf(MsgErrCryptoRand, err)
 		}
 		password[positions[i]] = cls[charIdx]
 		reserved[positions[i]] = true
@@ -57,7 +57,7 @@ func Generate(cfg GeneratorConfig) (string, error) {
 		}
 		idx, err := cryptoRandInt(len(charset))
 		if err != nil {
-			return "", fmt.Errorf("crypto/rand failed: %w", err)
+			return "", fmt.Errorf(MsgErrCryptoRand, err)
 		}
 		password[i] = charset[idx]
 	}
@@ -68,19 +68,19 @@ func Generate(cfg GeneratorConfig) (string, error) {
 // GeneratePassphrase produces a passphrase from the EFF wordlist.
 func GeneratePassphrase(cfg PassphraseConfig) (string, error) {
 	if cfg.Words < 1 {
-		return "", fmt.Errorf("passphrase must have at least 1 word")
+		return "", fmt.Errorf(MsgErrPassphraseWords1)
 	}
 
 	words := LoadWordlist()
 	if len(words) == 0 {
-		return "", fmt.Errorf("wordlist is empty")
+		return "", fmt.Errorf(MsgErrEmptyWordlist)
 	}
 
 	selected := make([]string, cfg.Words)
 	for i := range selected {
 		idx, err := cryptoRandInt(len(words))
 		if err != nil {
-			return "", fmt.Errorf("crypto/rand failed: %w", err)
+			return "", fmt.Errorf(MsgErrCryptoRand, err)
 		}
 		word := words[idx]
 		if cfg.Capitalize {
@@ -93,11 +93,11 @@ func GeneratePassphrase(cfg PassphraseConfig) (string, error) {
 		// Append a random digit to a random word.
 		wordIdx, err := cryptoRandInt(len(selected))
 		if err != nil {
-			return "", fmt.Errorf("crypto/rand failed: %w", err)
+			return "", fmt.Errorf(MsgErrCryptoRand, err)
 		}
 		digit, err := cryptoRandInt(10)
 		if err != nil {
-			return "", fmt.Errorf("crypto/rand failed: %w", err)
+			return "", fmt.Errorf(MsgErrCryptoRand, err)
 		}
 		selected[wordIdx] = fmt.Sprintf("%s%d", selected[wordIdx], digit)
 	}

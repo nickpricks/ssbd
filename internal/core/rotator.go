@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"strings"
 	"unicode"
 )
 
@@ -35,10 +34,10 @@ func Rotate(base string, count int) ([]string, error) {
 // are set, variants can grow or shrink by up to MaxLengthDelta chars.
 func RotateWithConfig(base string, cfg RotateConfig) ([]string, error) {
 	if cfg.Count < 1 {
-		return nil, fmt.Errorf("count must be at least 1")
+		return nil, fmt.Errorf(MsgErrCountMin1, ErrInvalidConstraint)
 	}
 	if len(base) == 0 {
-		return nil, fmt.Errorf("base password must not be empty")
+		return nil, fmt.Errorf(MsgErrBaseEmpty, ErrInvalidConstraint)
 	}
 
 	runes := []rune(base)
@@ -56,10 +55,10 @@ func RotateWithConfig(base string, cfg RotateConfig) ([]string, error) {
 			maxLen = cfg.MaxLength
 		}
 		if minLen > maxLen {
-			return nil, fmt.Errorf("min-length (%d) cannot exceed max-length (%d)", minLen, maxLen)
+			return nil, fmt.Errorf(MsgErrMinExceedsMax, ErrInvalidConstraint, minLen, maxLen)
 		}
 		if minLen < 1 {
-			return nil, fmt.Errorf("min-length must be at least 1")
+			return nil, fmt.Errorf(MsgErrMinLen1, ErrInvalidConstraint)
 		}
 		// Clamp to ±MaxLengthDelta from base.
 		if minLen < baseLen-MaxLengthDelta {
@@ -78,7 +77,7 @@ func RotateWithConfig(base string, cfg RotateConfig) ([]string, error) {
 
 	// Strict / default path: substitution-only, same length.
 	if len(subMuts) == 0 {
-		return nil, fmt.Errorf("password has no positions that can be varied (need letters or leet-speak characters)")
+		return nil, fmt.Errorf(MsgErrNoVaryPositions, ErrInvalidConstraint)
 	}
 	return generateSubstitutionVariants(runes, base, subMuts, cfg.Count)
 }
@@ -102,7 +101,7 @@ func generateSubstitutionVariants(runes []rune, base string, mutations []mutatio
 	}
 
 	if len(variants) < count {
-		return variants, fmt.Errorf("could only generate %d unique variants (password has limited mutation points)", len(variants))
+		return variants, fmt.Errorf(MsgErrLimitedMutations, ErrNoVariants, len(variants))
 	}
 	return variants, nil
 }
@@ -114,12 +113,12 @@ func generateVariableLengthVariants(runes []rune, base string, subMuts []mutatio
 
 	// Check feasibility: need shrink but no drop candidates.
 	if maxLen < baseLen && !hasDropCandidates(lenMuts) {
-		return nil, fmt.Errorf("cannot generate shorter variants: password has no redundant repeats to drop")
+		return nil, fmt.Errorf(MsgErrCannotShrink, ErrInvalidConstraint)
 	}
 
 	// If no substitution mutations and no length mutations, we can't do anything.
 	if len(subMuts) == 0 && len(lenMuts) == 0 {
-		return nil, fmt.Errorf("password has no positions that can be varied")
+		return nil, fmt.Errorf(MsgErrNoPositions, ErrInvalidConstraint)
 	}
 
 	seen := make(map[string]bool)
@@ -147,9 +146,9 @@ func generateVariableLengthVariants(runes []rune, base string, subMuts []mutatio
 
 	if len(variants) < count {
 		if len(variants) == 0 {
-			return nil, fmt.Errorf("could not generate any variants within length bounds [%d, %d]", minLen, maxLen)
+			return nil, fmt.Errorf(MsgErrOutsideBounds, ErrNoVariants, minLen, maxLen)
 		}
-		return variants, fmt.Errorf("could only generate %d unique variants (requested %d)", len(variants), count)
+		return variants, fmt.Errorf(MsgErrRequestedVariants, ErrNoVariants, len(variants), count)
 	}
 	return variants, nil
 }
@@ -225,14 +224,14 @@ func buildVariableLengthVariant(base []rune, subMuts []mutation, lenMuts []lengt
 				}
 			}
 			if !dropped {
-				return nil, fmt.Errorf("cannot shrink further")
+				return nil, fmt.Errorf(MsgErrCannotShrinkMore)
 			}
 		}
 	}
 
 	// Verify length bounds.
 	if len(current) < minLen || len(current) > maxLen {
-		return nil, fmt.Errorf("variant length %d outside bounds [%d, %d]", len(current), minLen, maxLen)
+		return nil, fmt.Errorf(MsgErrVariantBounds, len(current), minLen, maxLen)
 	}
 
 	return current, nil
@@ -317,11 +316,11 @@ func contextualPool(runes []rune, pos int) string {
 // applyLengthMutation applies a single growth mutation (insert/append/prepend).
 func applyLengthMutation(runes []rune, lm lengthMutation) ([]rune, error) {
 	if lm.charPool == "" {
-		return nil, fmt.Errorf("no char pool for mutation")
+		return nil, fmt.Errorf(MsgErrNoCharPool)
 	}
 	idx, err := cryptoRandInt(len(lm.charPool))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(MsgErrRandFailWrapped, ErrRandFailure, err)
 	}
 	ch := rune(lm.charPool[idx])
 
@@ -344,7 +343,7 @@ func applyLengthMutation(runes []rune, lm lengthMutation) ([]rune, error) {
 		result = append(result, runes[pos:]...)
 		return result, nil
 	default:
-		return nil, fmt.Errorf("unsupported growth mutation kind: %d", lm.kind)
+		return nil, fmt.Errorf(MsgErrUnsupportedGrowth, lm.kind)
 	}
 }
 
@@ -358,7 +357,7 @@ func applyDropRepeat(runes []rune) ([]rune, error) {
 			return result, nil
 		}
 	}
-	return nil, fmt.Errorf("no repeat runs to drop")
+	return nil, fmt.Errorf(MsgErrNoRepeatRuns)
 }
 
 // hasDropCandidates returns true if any length mutation is a drop-repeat.
@@ -462,17 +461,4 @@ func dedupRunes(alts []rune, original rune) []rune {
 		}
 	}
 	return result
-}
-
-// normalizeBase converts a password to its plain lowercase form for analysis.
-func normalizeBase(password string) string {
-	var sb strings.Builder
-	for _, r := range password {
-		if plain, ok := leetMap[r]; ok {
-			sb.WriteRune(plain)
-		} else {
-			sb.WriteRune(unicode.ToLower(r))
-		}
-	}
-	return sb.String()
 }

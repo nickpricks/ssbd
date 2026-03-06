@@ -17,6 +17,7 @@ Line-by-line documentation of every source file in the project.
 - [internal/core/hibp.go](#internalcorehibpgo)
 - [internal/core/wordlist.go](#internalcorewordlistgo)
 - [internal/core/rotator.go](#internalcorerotatorgo)
+- [internal/core/errors.go](#internalcoreerrorsgo)
 - [cmd/passforge/main.go](#cmdpassforgemain-go)
 - [Memory Analysis](#memory-analysis)
 - [AI Knowledge Base](#ai-knowledge-base)
@@ -339,7 +340,7 @@ Abstraction layer so the checker can be swapped for testing or offline mode. Bot
 
 ### Lines 17-28: `HIBPChecker` and `NewHIBPChecker()`
 
-Creates an HTTP client with a 5-second timeout. The timeout prevents the CLI from hanging if the HIBP API is slow or unreachable.
+Creates an HTTP client with a 5-second timeout. To prevent DoS attacks from maliciously large responses, the response body is explicitly constrained using `io.LimitReader(resp.Body, 1024*1024)` (1 MiB cap).
 
 ### Lines 30-68: `IsBreached()`
 
@@ -519,7 +520,7 @@ CLI entry point. Maps user commands to core library functions.
 
 ### Lines 13-34: `main()` and root command
 
-**Line 13:** `jsonOutput` is a package-level bool, set by `--json` flag.
+**Line 13:** The global `jsonOutput` flag was refactored out. The CLI now parses flags correctly isolated per subcommand, ensuring secure variable scoping.
 
 **Lines 16-20:** Root command definition. `Use: "passforge"` sets the binary name. `Short` and `Long` are help text.
 
@@ -560,9 +561,10 @@ Same pattern. Flags: `--words`/`-w`, `--separator`/`-s`, `--capitalize`, `--numb
 **Lines 116-133:** Output formatting. Plain text shows score, entropy, issues, and suggestions. JSON mode uses `printJSON()`.
 
 **Lines 135-141:** Exit codes for scripting:
-- `os.Exit(2)` if breached
-- `os.Exit(1)` if score < 40 (Weak)
-- Implicit `os.Exit(0)` otherwise
+- Returns `core.ErrBreached` (Exit 2) if breached
+- Returns `core.ErrWeak` (Exit 1) if score < 40 (Weak)
+- Returns any operational failure directly as error (Exit 3)
+- Implicit Exit 0 if perfectly strong/acceptable
 
 ### Lines 151-182: `suggestCmd()`
 
@@ -591,6 +593,22 @@ Calls `core.RotateWithConfig(password, cfg)` to generate variants. JSON output i
 ### Lines 223-227: `printJSON()`
 
 Utility function. Creates a `json.NewEncoder` on stdout with 2-space indentation. Used by all subcommands when `--json` is set.
+
+---
+
+## `internal/core/errors.go`
+
+Centralizes all error definitions and formatting message templates to avoid literal duplication.
+
+### Lines 7-17: `Err...` Constants
+
+Defines standard root errors the core library and CLI will match against using `errors.Is`.
+- `ErrWeak` / `ErrBreached` — Used by CLI exit routing.
+- `ErrInvalidConfig` / `ErrInvalidConstraint` / `ErrRandFailure` / `ErrNoVariants` — Core logic failures.
+
+### Lines 21-65: `Msg...` Constants
+
+String formatting templates used with `fmt.Errorf`. Centralizing these allows identical error messages across the framework, prevents redeclaration issues, and eases future internationalization. Examples include `MsgErrLengthTooShort`, `MsgErrCryptoRand`, and `MsgErrLimitedMutations`.
 
 ---
 ---
@@ -1117,11 +1135,9 @@ Uses `strings.Builder`. Allocates ~len bytes for the output string. Used in test
 
 ## `cmd/passforge/main.go` — Memory Analysis
 
-### Package-level variables (line 13)
+### Package-level variables
 
-```go
-var jsonOutput bool  // 1 byte (but aligned to 8 B in practice)
-```
+*Refactored out.* The CLI previously used a global `jsonOutput` bool, but this was removed to improve memory hygiene and testability.
 
 ### `main()` (lines 15-34)
 
@@ -1217,6 +1233,7 @@ passforge/
 │   ├── dictionary.go        # Common password list (sync.Once)
 │   ├── suggester.go         # Improvement suggestions
 │   ├── hibp.go              # HIBP k-anonymity breach checker
+│   ├── errors.go            # Centralized messaging & typed errors
 │   ├── wordlist.go          # EFF Large Wordlist loader (embed.FS)
 │   ├── rotator.go           # SSBD rotation variant engine
 │   ├── wordlist/
@@ -1247,6 +1264,7 @@ cmd/passforge/main.go
         ├── scorer.go        ← uses config, dictionary
         ├── dictionary.go    ← standalone (sync.Once + map)
         ├── suggester.go     ← uses config, scorer results
+        ├── errors.go        ← central error logic
         ├── hibp.go          ← standalone (net/http, SHA-1)
         ├── wordlist.go      ← standalone (embed.FS, sync.Once)
         └── rotator.go       ← uses config, scorer (leetMap), generator (cryptoRandInt), crypto/rand
@@ -1273,6 +1291,7 @@ cmd/passforge/main.go
 - `0` — password is acceptable
 - `1` — score < 40 (Weak)
 - `2` — password found in HIBP breach database
+- `3` — operational error or invalid input
 
 ---
 
@@ -1409,6 +1428,7 @@ All tunable constants live in the `const` block at the top of `config.go`. Struc
 
 | Date | Change Summary |
 |---|---|
+| 2026-03-06 | Security hardening sweep. Added `golang.org/x/term` for hidden password echo. Replaced global errors with centralized `internal/core/errors.go`. Guarded HIBP check with `io.LimitReader` (1 MiB memory cap). Enforced strict exit codes (0, 1, 2, 3) across CLI. |
 | 2026-03-06 | Alignment reformatting across `config.go`, `generator_test.go`, `rotator.go`, `scorer_test.go`. Added `all-clean` Makefile target. Enhanced `clean` to clear Go build cache. Bumped Go version from 1.25 to 1.26. |
 | 2026-03-02 | Release automation via GitHub Actions. Cross-platform builds. |
 | 2026-02-22 | SSBD v2: variable-length rotation variants. `RotateConfig` struct. `--min-length`, `--max-length`, `--strict-length` flags. |

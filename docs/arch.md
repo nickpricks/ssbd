@@ -26,6 +26,7 @@ passforge/
 │       ├── dictionary.go          # Common password list (~200 entries, O(1) lookup)
 │       ├── suggester.go           # Actionable improvement suggestions
 │       ├── hibp.go                # Have I Been Pwned k-anonymity breach check
+│       ├── errors.go              # Centralized error constants and formatted message templates
 │       ├── wordlist.go            # EFF wordlist loader (//go:embed, sync.Once)
 │       ├── rotator.go             # "Same Same But Different" rotation variant engine
 │       ├── wordlist/              # Embedded data
@@ -34,6 +35,7 @@ passforge/
 │       ├── rotator_test.go        # Tests: rotation variants, uniqueness, dedup, edge cases
 │       ├── scorer_test.go         # Tests: scoring, penalties, leet-speak, labels
 │       ├── suggester_test.go      # Tests: suggestion output for various password types
+│       ├── hibp_test.go           # Tests: HIBP check logic and NoOpChecker
 │       └── wordlist_test.go       # Tests: wordlist loading, word count, idempotency
 │
 ├── Makefile                       # Build, test, bench, vet, fmt — all common tasks
@@ -64,6 +66,7 @@ passforge/
 | [help.md](help.md) | Internal process overview — how generation, scoring, suggestions, breach checking work at a high level | Developers wanting to understand the logic |
 | [help_ext.md](help_ext.md) | External package reference — what cobra, pflag, mousetrap do and how we use them; notable stdlib packages | Developers new to the dependencies |
 | [man.md](man.md) | Detailed line-by-line source documentation — every function, every design decision | Deep reference when reading source code |
+| [WORKPLAN.md](../WORKPLAN.md) | Active sprint tracker — broken down tasks, current focus, and progress for the ongoing milestone | Contributors picking up tasks |
 
 ### Reading order for new contributors
 
@@ -73,6 +76,7 @@ passforge/
 4. **help_ext.md** — what are the external dependencies?
 5. **man.md** — deep dive into specific files/functions
 6. **PLAN.md** — future plans and architecture decisions
+7. **WORKPLAN.md** — what are we working on *right now*?
 
 ### Source Files
 
@@ -89,7 +93,11 @@ The CLI entry point. Defines six cobra subcommands:
 | `rotate` / `ssbd` | Rotation variants (Same Same But Different) | `core.RotateWithConfig(pw, cfg)` |
 | `bulk` | Generate N passwords | `core.Generate(cfg)` in a loop |
 
-Global flag `--json` enables JSON output on all commands. Exit codes: `0` strong, `1` weak, `2` breached.
+Global flag `--json` enables JSON output on all commands. Passwords can optionally be supplied via secure stdin or interactive hidden prompt to avoid bash-history leaks. Exit codes: `0` strong, `1` weak, `2` breached, `3` operational failure.
+
+#### `internal/core/errors.go`
+
+A central dictionary of all `Err...` base errors and `Msg...` string formatting templates used throughout the `core` library and CLI. Centralizes the string literals for easier maintenance, testing, and translation.
 
 #### `internal/core/config.go`
 
@@ -135,7 +143,7 @@ HIBP k-anonymity protocol:
 3. Check if remaining 35 chars appear in the response
 
 Defines `BreachChecker` interface with two implementations:
-- `HIBPChecker` — real HTTP client with 5s timeout
+- `HIBPChecker` — real HTTP client with 5s timeout and an `io.LimitReader` (1 MiB cap) to prevent DoS from maliciously large responses
 - `NoOpChecker` — always returns false (offline/testing)
 
 #### `internal/core/rotator.go`

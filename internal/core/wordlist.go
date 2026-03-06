@@ -2,6 +2,7 @@ package core
 
 import (
 	"embed"
+	"fmt"
 	"strings"
 	"sync"
 )
@@ -30,6 +31,9 @@ func LoadWordlist() []string {
 			if len(parts) == 2 {
 				wordlist = append(wordlist, strings.TrimSpace(parts[1]))
 			}
+		}
+		if len(wordlist) < 7000 {
+			panic(fmt.Sprintf("passforge: wordlist too small! Expected >7000 words, got %d. Data loss may have occurred.", len(wordlist)))
 		}
 	})
 	return wordlist

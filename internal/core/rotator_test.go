@@ -382,3 +382,16 @@ func TestApplyDropRepeat_NoRepeats(t *testing.T) {
 		t.Error("expected error when no repeat runs exist")
 	}
 }
+
+// normalizeBase converts a password to its plain lowercase form for analysis.
+func normalizeBase(password string) string {
+	var sb strings.Builder
+	for _, r := range password {
+		if plain, ok := leetMap[r]; ok {
+			sb.WriteRune(plain)
+		} else {
+			sb.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return sb.String()
+}

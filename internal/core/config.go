@@ -1,5 +1,9 @@
 package core
 
+import (
+	"fmt"
+)
+
 // Default configuration values. Change these to adjust global behavior.
 const (
 	// Generator defaults
@@ -62,6 +66,17 @@ func DefaultGeneratorConfig() GeneratorConfig {
 	}
 }
 
+// Validate ensures the generator configuration is valid.
+func (c *GeneratorConfig) Validate() error {
+	if c.Length < 1 {
+		return fmt.Errorf(MsgGenLengthTooShort, ErrInvalidConfig)
+	}
+	if !c.Uppercase && !c.Lowercase && !c.Digits && !c.Symbols {
+		return fmt.Errorf(MsgGenNoCharClass, ErrInvalidConfig)
+	}
+	return nil
+}
+
 // PassphraseConfig controls passphrase generation behavior.
 type PassphraseConfig struct {
 	Words      int
@@ -80,6 +95,14 @@ func DefaultPassphraseConfig() PassphraseConfig {
 	}
 }
 
+// Validate ensures the passphrase configuration is valid.
+func (c *PassphraseConfig) Validate() error {
+	if c.Words < 1 {
+		return fmt.Errorf(MsgPassphraseNoWords, ErrInvalidConfig)
+	}
+	return nil
+}
+
 // RotateConfig controls password rotation behavior.
 type RotateConfig struct {
 	Count        int  // number of variants to produce
@@ -93,6 +116,14 @@ func DefaultRotateConfig() RotateConfig {
 	return RotateConfig{
 		Count: DefaultRotateCount,
 	}
+}
+
+// Validate ensures the rotation configuration is valid.
+func (c *RotateConfig) Validate() error {
+	if c.Count < 1 {
+		return fmt.Errorf(MsgRotateCountInvalid, ErrInvalidConfig)
+	}
+	return nil
 }
 
 // ScoreResult holds the output of a password strength check.

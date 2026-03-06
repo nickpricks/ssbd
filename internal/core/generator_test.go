@@ -78,11 +78,11 @@ func TestGenerate_EnsureAllClassesPresent(t *testing.T) {
 
 func TestGenerate_CharacterClasses(t *testing.T) {
 	tests := []struct {
-		name      string
-		cfg       GeneratorConfig
-		wantUpper bool
-		wantLower bool
-		wantDigit bool
+		name       string
+		cfg        GeneratorConfig
+		wantUpper  bool
+		wantLower  bool
+		wantDigit  bool
 		wantSymbol bool
 	}{
 		{
@@ -155,9 +155,9 @@ func TestGenerate_CharacterClasses(t *testing.T) {
 
 func TestGenerate_ExcludeChars(t *testing.T) {
 	cfg := GeneratorConfig{
-		Length:    100,
-		Lowercase: true,
-		Uppercase: true,
+		Length:       100,
+		Lowercase:    true,
+		Uppercase:    true,
 		ExcludeChars: "aeiouAEIOU",
 	}
 	pw, err := Generate(cfg)

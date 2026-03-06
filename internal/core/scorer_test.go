@@ -137,8 +137,8 @@ func TestScore_StrongPassword(t *testing.T) {
 }
 
 func TestScore_LengthBonus(t *testing.T) {
-	short := Score("aB3$xY7!")          // 8 chars
-	long := Score("aB3$xY7!kM2#pN9@")  // 16 chars
+	short := Score("aB3$xY7!")        // 8 chars
+	long := Score("aB3$xY7!kM2#pN9@") // 16 chars
 	if long.Score <= short.Score {
 		t.Errorf("longer password should score higher: short=%d, long=%d", short.Score, long.Score)
 	}

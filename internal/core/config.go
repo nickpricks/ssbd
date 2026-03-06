@@ -11,30 +11,30 @@ const (
 	DefaultPassphraseSeparator = "-"
 
 	// Rotation defaults
-	DefaultRotateCount    = 1
-	MaxLengthDelta        = 3 // variants can grow or shrink by at most this many chars
+	DefaultRotateCount = 1
+	MaxLengthDelta     = 3 // variants can grow or shrink by at most this many chars
 
 	// Scoring thresholds
-	ScoreMax             = 100
-	ScoreMin             = 0
-	WeakThreshold        = 40 // scores below this are "Weak"
-	StrongThreshold      = 60 // scores at or above this are "Strong"
-	VeryStrongThreshold  = 80 // scores at or above this are "Very Strong"
-	BreachScoreCap       = 10 // breached passwords are capped at this score
+	ScoreMax            = 100
+	ScoreMin            = 0
+	WeakThreshold       = 40 // scores below this are "Weak"
+	StrongThreshold     = 60 // scores at or above this are "Strong"
+	VeryStrongThreshold = 80 // scores at or above this are "Very Strong"
+	BreachScoreCap      = 10 // breached passwords are capped at this score
 
 	// Scoring penalties
-	DictionaryPenalty    = 40
+	DictionaryPenalty     = 40
 	LeetDictionaryPenalty = 30
-	SequencePenaltySmall = 8
-	SequencePenaltyLarge = 15
-	RepeatPenaltySmall   = 10
-	RepeatPenaltyLarge   = 20
-	KeyboardPenaltySmall = 10
-	KeyboardPenaltyLarge = 20
+	SequencePenaltySmall  = 8
+	SequencePenaltyLarge  = 15
+	RepeatPenaltySmall    = 10
+	RepeatPenaltyLarge    = 20
+	KeyboardPenaltySmall  = 10
+	KeyboardPenaltyLarge  = 20
 
 	// Scoring bonuses
-	LengthBonusThreshold = 12 // passwords longer than this get a bonus
-	LengthBonusMax       = 15
+	LengthBonusThreshold  = 12 // passwords longer than this get a bonus
+	LengthBonusMax        = 15
 	LengthBonusMultiplier = 2
 
 	// Entropy scaling
@@ -43,11 +43,11 @@ const (
 
 // GeneratorConfig controls password generation behavior.
 type GeneratorConfig struct {
-	Length     int
-	Uppercase  bool
-	Lowercase  bool
-	Digits     bool
-	Symbols    bool
+	Length       int
+	Uppercase    bool
+	Lowercase    bool
+	Digits       bool
+	Symbols      bool
 	ExcludeChars string // characters to exclude from generation
 }
 
@@ -64,8 +64,8 @@ func DefaultGeneratorConfig() GeneratorConfig {
 
 // PassphraseConfig controls passphrase generation behavior.
 type PassphraseConfig struct {
-	Words     int
-	Separator string
+	Words      int
+	Separator  string
 	Capitalize bool // capitalize first letter of each word
 	AddNumber  bool // append a random digit to a random word
 }
@@ -73,8 +73,8 @@ type PassphraseConfig struct {
 // DefaultPassphraseConfig returns sensible defaults for passphrase generation.
 func DefaultPassphraseConfig() PassphraseConfig {
 	return PassphraseConfig{
-		Words:     DefaultPassphraseWords,
-		Separator: DefaultPassphraseSeparator,
+		Words:      DefaultPassphraseWords,
+		Separator:  DefaultPassphraseSeparator,
 		Capitalize: true,
 		AddNumber:  false,
 	}

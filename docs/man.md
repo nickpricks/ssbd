@@ -18,6 +18,8 @@ Line-by-line documentation of every source file in the project.
 - [internal/core/wordlist.go](#internalcorewordlistgo)
 - [internal/core/rotator.go](#internalcorerotatorgo)
 - [cmd/passforge/main.go](#cmdpassforgemain-go)
+- [Memory Analysis](#memory-analysis)
+- [AI Knowledge Base](#ai-knowledge-base)
 
 ---
 
@@ -1176,3 +1178,239 @@ Typical JSON encoding of a `ScoreResult`: ~500 B heap (reflection metadata + out
 | `IsBreached()` | ~90 KB | Dominated by HIBP API response body |
 
 All per-operation allocations are short-lived and collected by Go's GC within the same or next GC cycle. No memory leaks detected.
+
+---
+---
+
+# AI Knowledge Base
+
+> **Audience:** AI coding assistants working on the PassForge codebase.
+> This section is a self-contained orientation guide — project identity, architecture, conventions, and operational details.
+
+---
+
+## Project Identity
+
+| Key | Value |
+|---|---|
+| **Name** | PassForge |
+| **Module** | `github.com/passforge/passforge` |
+| **Go version** | 1.26.0 |
+| **CLI framework** | [Cobra](https://github.com/spf13/cobra) v1.10.2 |
+| **Randomness** | `crypto/rand` (cryptographically secure) — never `math/rand` |
+| **Signature feature** | **SSBD** — "Same Same But Different" password rotation engine |
+| **Binary name** | `passforge` |
+| **License** | See repository root |
+
+---
+
+## Directory Layout
+
+```
+passforge/
+├── cmd/passforge/
+│   └── main.go              # CLI entry point (Cobra commands)
+├── internal/core/
+│   ├── config.go            # All structs, constants, defaults
+│   ├── generator.go         # Password & passphrase generation
+│   ├── scorer.go            # Strength scoring engine
+│   ├── dictionary.go        # Common password list (sync.Once)
+│   ├── suggester.go         # Improvement suggestions
+│   ├── hibp.go              # HIBP k-anonymity breach checker
+│   ├── wordlist.go          # EFF Large Wordlist loader (embed.FS)
+│   ├── rotator.go           # SSBD rotation variant engine
+│   ├── wordlist/
+│   │   └── eff_large.txt    # 7776-word EFF diceware list (embedded)
+│   ├── *_test.go            # Unit tests for each module
+├── docs/
+│   ├── man.md               # This file — detailed internal reference
+│   ├── arch.md              # Architecture overview
+│   ├── help.md              # CLI help documentation
+│   ├── help_ext.md          # Extended help documentation
+│   └── PLAN.md              # Development roadmap
+├── Makefile                  # Build, test, run, clean targets
+├── README.md                 # User-facing project overview
+├── WORKPLAN.md               # Work planning document
+├── go.mod / go.sum           # Go module files
+└── .gitignore
+```
+
+---
+
+## Dependency Graph
+
+```
+cmd/passforge/main.go
+  └── internal/core/
+        ├── config.go        ← structs & constants (imported by all)
+        ├── generator.go     ← uses config, wordlist, crypto/rand
+        ├── scorer.go        ← uses config, dictionary
+        ├── dictionary.go    ← standalone (sync.Once + map)
+        ├── suggester.go     ← uses config, scorer results
+        ├── hibp.go          ← standalone (net/http, SHA-1)
+        ├── wordlist.go      ← standalone (embed.FS, sync.Once)
+        └── rotator.go       ← uses config, scorer (leetMap), generator (cryptoRandInt), crypto/rand
+```
+
+**Key rule:** All core logic lives in `internal/core/`. The CLI layer (`cmd/passforge/main.go`) is a thin Cobra wrapper — no business logic belongs there.
+
+---
+
+## CLI Commands & Flag Mapping
+
+| Command | Aliases | Core Function | Key Flags |
+|---|---|---|---|
+| `generate` | — | `core.Generate(cfg)` | `--length/-l`, `--upper`, `--lower`, `--digits`, `--symbols`, `--exclude` |
+| `passphrase` | — | `core.GeneratePassphrase(cfg)` | `--words/-w`, `--separator/-s`, `--capitalize`, `--number` |
+| `check` | — | `core.Score(pw)` | `--breach` (enables HIBP check) |
+| `suggest` | — | `core.Score(pw)` + display suggestions | — |
+| `rotate` | `ssbd` | `core.RotateWithConfig(pw, cfg)` | `--count/-n`, `--min-length`, `--max-length`, `--strict-length` |
+| `bulk` | — | `core.Generate(cfg)` × N | `--count/-n`, all generate flags |
+
+**Global flag:** `--json` on all commands — outputs structured JSON via `printJSON()`.
+
+**Exit codes** (`check` command only):
+- `0` — password is acceptable
+- `1` — score < 40 (Weak)
+- `2` — password found in HIBP breach database
+
+---
+
+## Scoring Algorithm Quick Reference
+
+### Base score
+`entropy_bits × 0.78` (capped at 100). Entropy = `length × log2(pool_size)`.
+
+### Pool sizes
+| Class | Size |
+|---|---|
+| Lowercase | 26 |
+| Uppercase | 26 |
+| Digits | 10 |
+| Symbols | 32 |
+| **Max pool** | **94** |
+
+### Penalties
+
+| Pattern | Threshold | Penalty |
+|---|---|---|
+| Dictionary match (exact) | — | −40 |
+| Dictionary match (leet-normalized) | — | −30 |
+| Sequential chars (ascending/descending) | run ≥ 4 | −15 |
+| Sequential chars | run = 3 | −8 |
+| Repeated chars | run ≥ 4 | −20 |
+| Repeated chars | run = 3 | −10 |
+| Keyboard walk | match ≥ 6 | −20 |
+| Keyboard walk | match 4–5 | −10 |
+
+### Bonuses
+- Length > 12: `+2 × (length − 12)`, max +15
+
+### Labels
+| Score Range | Label |
+|---|---|
+| 80–100 | Very Strong |
+| 60–79 | Strong |
+| 40–59 | Fair |
+| 0–39 | Weak |
+
+### Breach override
+If breached: score capped at 10, label becomes "Weak".
+
+---
+
+## Makefile Targets
+
+```
+make help          # Show all targets
+make build         # go build -o passforge ./cmd/passforge
+make test          # go test -v ./...
+make bench         # go test -bench=. -benchmem ./...
+make vet           # go vet ./...
+make fmt           # go fmt ./...
+make cover         # go test -cover ./...
+make all           # vet + test + bench
+make all-clean     # clean + all (full reset & verify)
+make clean         # go clean --cache && rm -f passforge
+
+# Run commands (examples):
+make generate ARGS="--length 20"
+make passphrase ARGS="--words 4"
+make check ARGS="MyP@ssw0rd"
+make suggest ARGS="hello123"
+make rotate ARGS="p@sSwor4 --count 5"
+make ssbd ARGS="p@sSwor4 --count 5"
+make bulk ARGS="--count 10 --length 16"
+```
+
+---
+
+## Design Patterns & Conventions
+
+### Caching pattern
+Both `dictionary.go` and `wordlist.go` use `sync.Once` for lazy, thread-safe initialization.
+The pattern is: package-level `var xxxOnce sync.Once` + `var xxx <type>` + a `loadXxx()` function.
+
+### Interface abstraction
+`BreachChecker` interface in `hibp.go` enables test doubles (`NoOpChecker`) without mocking.
+
+### `crypto/rand` only
+All randomness flows through `cryptoRandInt()` in `generator.go`. Uses `crypto/rand.Int()` with `*big.Int`. Never use `math/rand` anywhere.
+
+### Embedded assets
+The EFF wordlist is compiled into the binary via `//go:embed`. No runtime file I/O for wordlist access.
+
+### Rotation engine (SSBD)
+- **v1 API:** `Rotate(base, count)` — strict same-length variants via `StrictLength: true`
+- **v2 API:** `RotateWithConfig(base, cfg)` — supports variable-length via `MinLength`/`MaxLength`
+- Uses **mixed-radix enumeration** to cycle through mutation combinations deterministically
+- Length mutations: insert, append, prepend (grow) or drop-repeat (shrink), bounded by `MaxLengthDelta` (±3)
+
+### Config naming
+All tunable constants live in the `const` block at the top of `config.go`. Structs use `XxxConfig` naming with a `DefaultXxxConfig()` factory function.
+
+### Testing patterns
+- Tests live alongside source files as `*_test.go` in the same package
+- Table-driven tests (Go idiomatic `[]struct{ name; ... }` + `t.Run`)
+- Breach checker tests use `NoOpChecker` to avoid network calls
+- Generator tests use large samples (length 100+) to verify statistical properties
+
+---
+
+## Common Pitfalls
+
+1. **Don't add logic to `main.go`** — it's a thin Cobra wrapper. All business logic goes in `internal/core/`.
+2. **Don't use `math/rand`** — always use `cryptoRandInt()` from `generator.go`.
+3. **`sync.Once` is load-bearing** — `dictionary.go` and `wordlist.go` rely on it for thread safety. Don't refactor it away.
+4. **`leetMap` is shared** — `scorer.go` defines it, `rotator.go` inverts it via `buildReverseLeet()`. Changes to `leetMap` affect both scoring and rotation.
+5. **Struct alignment matters** — Go structs are padded for alignment. The Memory Analysis section documents exact layouts. Reordering fields can change struct size.
+6. **EFF wordlist is embedded** — don't try to read it from disk at runtime. It's compiled into the binary.
+7. **HIBP timeout is 5 seconds** — `NewHIBPChecker()` sets `http.Client{Timeout: 5 * time.Second}`. Don't remove this.
+8. **`make clean` clears Go cache** — `go clean --cache` is intentional. It ensures a truly fresh build.
+
+---
+
+## Test Coverage Map
+
+| File | Test File | Test Count | Coverage Areas |
+|---|---|---|---|
+| `generator.go` | `generator_test.go` | 8 tests | Default config, custom length, class presence, exclusion, uniqueness |
+| `rotator.go` | `rotator_test.go` | 16 tests | Basic variants, same-length, structure preservation, edge cases, v2 variable-length, length mutations |
+| `scorer.go` | `scorer_test.go` | 9 tests | Empty, common passwords, leet, sequences, repeats, keyboard walks, strong, length bonus, labels |
+| `suggester.go` | `suggester_test.go` | 5 tests | Short, missing classes, common, strong |
+| `wordlist.go` | `wordlist_test.go` | 2 tests | Load, idempotent reload |
+| `main.go` | (in `cmd/passforge/`) | 4 tests | SSBD alias, JSON output, min/max length flags, strict length |
+
+**Total: 44+ unit tests.** Run with `make test`.
+
+---
+
+## Changelog
+
+| Date | Change Summary |
+|---|---|
+| 2026-03-06 | Alignment reformatting across `config.go`, `generator_test.go`, `rotator.go`, `scorer_test.go`. Added `all-clean` Makefile target. Enhanced `clean` to clear Go build cache. Bumped Go version from 1.25 to 1.26. |
+| 2026-03-02 | Release automation via GitHub Actions. Cross-platform builds. |
+| 2026-02-22 | SSBD v2: variable-length rotation variants. `RotateConfig` struct. `--min-length`, `--max-length`, `--strict-length` flags. |
+| 2026-02-21 | Makefile created. Clean, test, vet, bench, fmt, cover targets. Help command. |
+| — | Initial commit: generate, check, suggest, rotate, bulk, passphrase, HIBP breach check. |

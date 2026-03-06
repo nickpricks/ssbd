@@ -166,6 +166,10 @@ Nice-to-have ideas **not committed to any milestone**.
 - [x] CLI — all subcommands via cobra (`generate`, `passphrase`, `check`, `suggest`, `bulk`)
 - [x] Unit + table-driven tests (85%+ coverage on core)
 - [x] `Makefile` with build, test, bench, vet, fmt, and per-command run targets
+- [x] `clean` target — `go clean --cache && rm -f passforge`
+  - Clears the Go build cache and removes the compiled `passforge` binary
+  - `all-clean` composite target runs `clean` then `all` (vet + test + bench) for a full reset-and-verify cycle
+  - ⚠️ **Windows note:** `rm -f` is a Unix command. On PowerShell it works via the `Remove-Item` alias, but `-f` is interpreted as `-Force`, which is compatible. The `&&` operator requires PowerShell 7+. For broader Windows compat, consider `go clean --cache; if ($?) { Remove-Item -Force -ErrorAction SilentlyContinue passforge }` or use `cmd /c` in the Makefile.
 
 ### M1.5: SSBD + CLI Extras (Go)
 

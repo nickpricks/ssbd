@@ -242,10 +242,10 @@ func buildVariableLengthVariant(base []rune, subMuts []mutation, lenMuts []lengt
 type lengthMutKind int
 
 const (
-	lmInsert    lengthMutKind = iota // insert a random char at a position
-	lmAppend                         // append a symbol/digit to end
-	lmPrepend                        // prepend a symbol/digit to start
-	lmDropRepeat                     // remove one char from a consecutive repeat run
+	lmInsert     lengthMutKind = iota // insert a random char at a position
+	lmAppend                          // append a symbol/digit to end
+	lmPrepend                         // prepend a symbol/digit to start
+	lmDropRepeat                      // remove one char from a consecutive repeat run
 )
 
 // lengthMutation describes a candidate length-changing operation.
@@ -373,8 +373,8 @@ func hasDropCandidates(muts []lengthMutation) bool {
 
 // mutation represents a position in the password that can be toggled.
 type mutation struct {
-	pos       int
-	original  rune
+	pos        int
+	original   rune
 	alternates []rune // possible replacement runes
 }
 
@@ -416,8 +416,8 @@ func findMutations(runes []rune) []mutation {
 
 		if len(alts) > 0 {
 			mutations = append(mutations, mutation{
-				pos:       i,
-				original:  r,
+				pos:        i,
+				original:   r,
 				alternates: dedupRunes(alts, r),
 			})
 		}

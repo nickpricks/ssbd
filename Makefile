@@ -74,8 +74,11 @@ cover:
 # All checks
 all: vet test bench
 
+# Reset and Refresh
+all-clean: clean all
+
 # Clean
 clean:
-	rm -f passforge
+	go clean --cache && rm -f passforge
 
 .PHONY: help build generate passphrase check suggest rotate ssbd bulk test bench vet fmt cover all clean

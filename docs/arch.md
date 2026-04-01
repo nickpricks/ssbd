@@ -44,12 +44,18 @@ passforge/
 ├── go.sum                         # Dependency checksums (auto-managed by Go)
 │
 ├── README.md                      # Project overview, features, scoring algorithm, roadmap
+├── CLAUDE.md                      # Claude Code guidance for AI assistants working in this repo
+├── WORKPLAN.md                    # Completed sprint tracker for v0.1.6 Security Hardening
 ├── docs/                          # All documentation (except README)
 │   ├── PLAN.md                    # Full implementation plan, architecture decisions, risk register
+│   ├── review.md           # Code review findings
+│   ├── README.md                  # Documentation index
 │   ├── arch.md                    # This file — project structure, file map, setup guide
 │   ├── help.md                    # Internal process overview (how scoring, generation, etc. work)
 │   ├── help_ext.md                # External package reference (cobra, pflag, stdlib usage)
-│   └── man.md                     # Detailed line-by-line source code documentation
+│   ├── man.md                     # Detailed line-by-line source code documentation
+│   └── specs/
+│       └── 2026-03-23-password-vault-design.md  # Password Vault design spec (v0.3.0)
 ```
 
 ---
@@ -61,22 +67,25 @@ passforge/
 | File | Purpose | Audience |
 |---|---|---|
 | [README.md](../README.md) | Project overview — what PassForge is, features, tech stack, roadmap | Everyone (first thing you read) |
-| [PLAN.md](PLAN.md) | Implementation plan — platform strategy, milestone roadmap, deployment, risk register | Contributors, architects |
+| [CLAUDE.md](../CLAUDE.md) | Claude Code guidance — build commands, architecture summary, conventions, project status | AI assistants and contributors using Claude Code |
+| [PLAN.md](PLAN.md) | Implementation plan + codebase audit — platform strategy, milestones, feature tiers, design decisions, risk register | Contributors, architects |
+| [review.md](review.md) | Code review findings — issues identified during automated review | Contributors, maintainers |
 | [arch.md](arch.md) | This file — directory structure, file map, setup/run instructions | New developers, onboarding |
 | [help.md](help.md) | Internal process overview — how generation, scoring, suggestions, breach checking work at a high level | Developers wanting to understand the logic |
 | [help_ext.md](help_ext.md) | External package reference — what cobra, pflag, mousetrap do and how we use them; notable stdlib packages | Developers new to the dependencies |
 | [man.md](man.md) | Detailed line-by-line source documentation — every function, every design decision | Deep reference when reading source code |
-| [WORKPLAN.md](../WORKPLAN.md) | Active sprint tracker — broken down tasks, current focus, and progress for the ongoing milestone | Contributors picking up tasks |
+| [WORKPLAN.md](../WORKPLAN.md) | Completed sprint tracker for v0.1.6 Security Hardening — broken down tasks and progress | Historical reference |
 
 ### Reading order for new contributors
 
 1. **README.md** — what does this project do?
-2. **arch.md** (this file) — how is it organized? how do I run it?
-3. **help.md** — how do the internals work?
-4. **help_ext.md** — what are the external dependencies?
-5. **man.md** — deep dive into specific files/functions
-6. **PLAN.md** — future plans and architecture decisions
-7. **WORKPLAN.md** — what are we working on *right now*?
+2. **CLAUDE.md** — build commands, conventions, and project status (especially useful for AI contributors)
+3. **arch.md** (this file) — how is it organized? how do I run it?
+4. **help.md** — how do the internals work?
+5. **help_ext.md** — what are the external dependencies?
+6. **man.md** — deep dive into specific files/functions
+7. **PLAN.md** — future plans, architecture decisions, and codebase audit
+8. **WORKPLAN.md** — completed sprint tracker for v0.1.6
 
 ### Source Files
 
@@ -173,7 +182,7 @@ All tests live alongside the code they test in `internal/core/`:
 
 ### Prerequisites
 
-- **Go 1.21+** (the project uses `go 1.25.0` in go.mod but any recent Go works)
+- **Go 1.26+** (go.mod specifies `go 1.26.0`)
 - **Git** (to clone the repo)
 
 ### Clone and Build

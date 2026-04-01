@@ -139,11 +139,12 @@ passforge rotate "p@sSwor4" --count 5 --strict-length
 |---|---|---|---|---|
 | **v0.1.0** | Core + CLI | 🟢 Done | Password & passphrase generation, strength scoring (entropy, patterns, dictionary, leet-speak), suggestion engine, HIBP breach check, JSON output, bulk generation, scriptable exit codes | — |
 | **v0.1.5** | Same Same But Different | 🟢 Done | Rotation variant engine (`passforge rotate` / `ssbd`), variable-length variants (`--min-length`/`--max-length`/`--strict-length`) | — |
-| **v0.1.6** | Security Hardening | 🔵 Next | Stdin/prompt password input (no process-table exposure), HIBP hard-fail on `--breach` errors, `io.LimitReader` on HIBP response, keyboard walk penalty fix, `ScoreResult.MarkBreached()` method, rune-based entropy scoring, distinct exit codes, typed errors in rotator, config `Validate()` methods | ~1 week |
+| **v0.1.6** | Security Hardening | 🟢 Done | Stdin/prompt password input (no process-table exposure), HIBP hard-fail on `--breach` errors, `io.LimitReader` on HIBP response, keyboard walk penalty fix, `ScoreResult.MarkBreached()` method, rune-based entropy scoring, distinct exit codes, typed errors in rotator, config `Validate()` methods | ~1 week |
 | **v0.2.0** | CLI Polish | ⚪ Planned | Password improvement command (`passforge improve`), scoring gate (`--min-score` on rotate), CI pipeline (fmt, vet, staticcheck, test matrix), GoReleaser, Homebrew tap, shell completions, expanded dictionary (~100k SecLists) | ~1 week |
-| **v0.3.0** | Web (Fiber) | ⚪ Planned | Fiber v3 server, JSON API (`/api/generate`, `/api/check`, `/api/suggest`), static SPA frontend (HTML + JS/htmx), real-time strength meter, embedded assets via `//go:embed`, Docker image | ~2 weeks |
-| **v0.4.0** | Desktop (Fyne) | ⚪ Planned | Fyne GUI app, Generate / Check / Suggest tabs, clipboard copy with auto-clear timer, cross-platform packaging (.app, .exe, .tar.gz) | ~2 weeks |
-| **v0.5.0** | Extras | ⚪ Planned | QR code output, pronounceable password mode, custom charset templates, TUI mode (bubbletea), man page generation | ~2 weeks |
+| **v0.3.0** | Password Vault | ⚪ Planned | Encrypted JSON vault (~/.passforge/vault.json.enc), AES-256-GCM + Argon2id key derivation, password history (hash-only), reuse detection, sync interface (Git default) | — |
+| **v0.4.0** | Web (Fiber) | ⚪ Planned | Fiber v3 server, JSON API (`/api/generate`, `/api/check`, `/api/suggest`), static SPA frontend (HTML + JS/htmx), real-time strength meter, embedded assets via `//go:embed`, Docker image | ~2 weeks |
+| **v0.5.0** | Desktop (Fyne) | ⚪ Planned | Fyne GUI app, Generate / Check / Suggest tabs, clipboard copy with auto-clear timer, cross-platform packaging (.app, .exe, .tar.gz) | ~2 weeks |
+| **v0.6.0** | Extras | ⚪ Planned | QR code output, pronounceable password mode, custom charset templates, TUI mode (bubbletea), man page generation | ~2 weeks |
 | **v1.0.0** | Stable Release | ⚪ Planned | API freeze, full test coverage, documentation site, security audit, stable binary distribution across all channels | ~1 month |
 | **v2.0.0** | Rust / WASM | 🔮 Future | Rust core rewrite, WASM compilation for client-only web (zero server), Tauri desktop app | TBD |
 | **v3.0.0** | Polyglot | 🔮 Future | Zig and Odin implementations, cross-language performance benchmarks | TBD |

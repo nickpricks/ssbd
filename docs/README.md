@@ -7,6 +7,6 @@
 | [help_ext.md](help_ext.md) | External package reference — cobra, pflag, and notable stdlib usage |
 | [man.md](man.md) | Line-by-line source code documentation with memory analysis |
 | [PLAN.md](PLAN.md) | Implementation plan, platform strategy, milestones, risk register |
-| [Claude-review.md](Claude-review.md) | Automated code review — security, correctness, and type design findings |
+| [review.md](review.md) | Automated code review — security, correctness, and type design findings |
 
 > See the root [README](../README.md) for quick start, features, and roadmap.

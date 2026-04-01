@@ -1,6 +1,6 @@
 # WORKPLAN — PassForge v0.1.6: Security Hardening
 
-> Current focus: address critical and high-severity findings from [code review](docs/Claude-review.md).
+> Current focus: address critical and high-severity findings from [code review](docs/review.md).
 
 ---
 
